@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import auth, camera_manager, crud, schemas
+from .. import auth, camera_manager, crud, detection_engine, schemas
 from ..database import get_db
 
 router = APIRouter(
@@ -13,6 +13,11 @@ router = APIRouter(
 @router.get("", response_model=schemas.DetectionSettingsOut)
 def get_detection_settings(db: Session = Depends(get_db)):
     return crud.get_detection_settings(db)
+
+
+@router.get("/models")
+def list_detector_models():
+    return detection_engine.available_models()
 
 
 @router.put("", response_model=schemas.DetectionSettingsOut)
@@ -27,6 +32,9 @@ def update_detection_settings(
     window_frames = merged_update.get(
         "confirmation_window_frames", settings.confirmation_window_frames
     )
+    model = merged_update.get("detector_model")
+    if model is not None and model not in detection_engine.available_models():
+        raise HTTPException(400, f"unknown detector model {model!r}")
     if min_observations > window_frames:
         raise HTTPException(
             400,

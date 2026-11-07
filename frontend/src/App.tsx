@@ -17,6 +17,8 @@ import UserManagement from "./pages/UserManagement";
 import RoleManagement from "./pages/RoleManagement";
 import DetectionSettingsPage from "./pages/DetectionSettings";
 import ChangePassword from "./pages/ChangePassword";
+import SystemStatus from "./pages/SystemStatus";
+import SiteSettings from "./pages/SiteSettings";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -93,6 +95,22 @@ function App() {
               element={
                 <RequireAdmin>
                   <DetectionSettingsPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/site"
+              element={
+                <RequireAdmin>
+                  <SiteSettings />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/system"
+              element={
+                <RequireAdmin>
+                  <SystemStatus />
                 </RequireAdmin>
               }
             />

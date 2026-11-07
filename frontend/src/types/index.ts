@@ -4,7 +4,7 @@ export type Point = [number, number];
 
 // "fisheye_view" = one virtual camera view cut out of a "fisheye" camera
 // (no connection settings of its own -- see backend app/fisheye.py).
-export type CameraSourceType = "ip" | "webcam" | "fisheye" | "fisheye_view";
+export type CameraSourceType = "ip" | "webcam" | "fisheye" | "fisheye_view" | "file";
 export type CameraProtocol = "rtsp" | "http" | "https";
 
 export interface Camera {
@@ -36,6 +36,7 @@ export interface Camera {
   view_direction_deg: number | null;
   view_tilt_deg: number | null;
   view_fov_deg: number | null;
+  site_id: number | null;
 }
 
 export interface FisheyeViewPayload {
@@ -154,6 +155,16 @@ export interface Event {
   timestamp: string;
   status: EventStatus;
   has_snapshot: boolean;
+  event_type: string | null; // machine type, e.g. "exclusion"; policy_type is the human label
+  has_clip: boolean; // raw clip + box overlay (ADR 0008)
+}
+
+// GET /api/events/{id}/clip-overlay: boxes per clip frame, in `width` x `height` pixels
+export interface ClipOverlay {
+  width: number;
+  height: number;
+  start_ts: number;
+  frames: { t: number; boxes: { id: number; cls: string; xyxy: number[]; conf: number | null; threat: boolean }[] }[];
 }
 
 export interface EventComment {
@@ -169,6 +180,7 @@ export interface AlertPayload {
   camera_id: number | null;
   zone_name: string;
   policy_type: string;
+  event_type: string | null;
   risk_score: number;
   timestamp: string;
 }
@@ -229,7 +241,7 @@ export const PAGE_LABELS: Record<string, string> = {
   "/admin/zones": "Zone Studio",
   "/admin/calibration": "Calibration Tool",
   "/admin/fisheye": "Fisheye Setup",
-  "/coaching": "Coaching Workbench",
+  "/coaching": "Incidents",
   "/incidents/search": "Incident Search",
   "/analytics": "Analytics & Reports",
   "/heatmap/usage": "Usage Heatmap",
@@ -279,6 +291,42 @@ export interface DetectionSettings {
   confirmation_min_observations: number;
   confirmation_window_frames: number;
   ignore_person_shadows: boolean;
+  detector_model: string;
 }
 
 export type DetectionSettingsUpdatePayload = Partial<DetectionSettings>;
+
+// ------------------------------------------------------------------ sites / system
+
+export type SiteType = "hospital" | "mall" | "other";
+
+export interface Site {
+  id: number;
+  name: string;
+  site_type: SiteType;
+  timezone: string;
+  after_hours_from: string; // "HH:MM"
+  after_hours_to: string;
+  trading_hours: Record<string, [string, string]> | null;
+  max_stay_hours: number | null;
+}
+
+export interface CameraMetrics {
+  camera_id: number;
+  status: CameraStatus;
+  fps: number;
+  process_ms: number;
+  frames: number;
+  incidents: number;
+  stream_queue: number;
+}
+
+export interface SystemMetrics {
+  cameras: CameraMetrics[];
+  gpus: { name: string; memory_used_mb: number; memory_total_mb: number; utilization_pct: number }[];
+  models_loaded: string[];
+  data_folders: Record<string, number>; // MB
+  disk_free_gb: number;
+  disk_total_gb: number;
+  verification_queue: number | null;
+}

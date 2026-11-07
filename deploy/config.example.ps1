@@ -21,3 +21,7 @@ $Port = 8000
 # Coaching Workbench. Leave blank to skip setting them.
 $AzureEmailConnectionString = ""
 $AzureEmailSender           = ""
+
+# Encrypts stored secrets (AI verification API keys, device passwords). install.ps1 fills it in.
+# Keep it secret and back it up: if it is lost or changed, stored keys must be re-entered.
+$TiamSecretKey = ""

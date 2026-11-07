@@ -23,6 +23,8 @@ from .routers import (
     heatmap as heatmap_router,
     incidents,
     roles,
+    sites,
+    system,
     users,
     zone_types,
     zones,
@@ -70,6 +72,7 @@ _add_missing_columns(
         "view_direction_deg": "FLOAT NULL",
         "view_tilt_deg": "FLOAT NULL",
         "view_fov_deg": "FLOAT NULL",
+        "site_id": "INT NULL",
     },
 )
 _add_missing_columns(
@@ -98,16 +101,19 @@ _add_missing_columns(
         "confirmation_min_observations": "INT NOT NULL DEFAULT 3",
         "confirmation_window_frames": "INT NOT NULL DEFAULT 6",
         "detector_imgsz": "INT NOT NULL DEFAULT 960",
+        "detector_model": "NVARCHAR(255) NOT NULL DEFAULT 'yolov8s.pt'",
         "ignore_person_shadows": "BIT NOT NULL DEFAULT 1",
     },
 )
 
 _add_missing_columns("calibrations", {"real_world_width_m": "FLOAT NULL"})
 _add_missing_columns("users", {"must_change_password": "BIT NOT NULL DEFAULT 0"})
+_add_missing_columns("events", {"event_type": "NVARCHAR(64) NULL", "has_clip": "BIT NOT NULL DEFAULT 0"})
 
 with SessionLocal() as _db:
     crud.seed_default_zone_types(_db)
     crud.seed_default_admin(_db)
+    crud.seed_default_site(_db)
 
 
 async def _pump_alerts(alert_queue: asyncio.Queue) -> None:
@@ -173,6 +179,8 @@ app.include_router(heatmap_router.router, dependencies=_login_required)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(detection_settings.router)
+app.include_router(sites.router, dependencies=_login_required)
+app.include_router(system.router)
 
 
 @app.get("/api/health")

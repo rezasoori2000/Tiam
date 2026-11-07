@@ -41,8 +41,8 @@ hardcoded `device="cuda"` fails.
 
 ## Commands
 
-There is no documented build/lint/test tooling — no ruff/flake8/black config, no pytest suite, no
-CI. This is the actual state of the repo, not an omission from this doc.
+No linter config and no CI. Tests: `backend/tests/` (pytest; no GPU or DB needed – the detection
+engine is faked) plus `scripts/verify_logic.py`.
 
 ```bash
 # setup (from backend/)
@@ -50,9 +50,21 @@ python -m venv venv
 venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 venv\Scripts\pip install -r requirements.txt
 
+# secret-encryption key for stored API keys (once per dev machine; PowerShell, new terminal after):
+#   [Environment]::SetEnvironmentVariable("TIAM_SECRET_KEY", (venv\Scripts\python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"), "User")
+
 # run (from backend/)
 venv\Scripts\uvicorn app.main:app --reload
+
+# tests (from backend/)
+venv\Scripts\python -m pytest -q tests
+venv\Scripts\python scripts\verify_logic.py
+venv\Scripts\python scripts\replay.py --make-demo          # synthetic demo clip, scored
+venv\Scripts\python scripts\replay.py data\retail_test_clips\<name>.yaml   # see docs/test_clips.md
 ```
+
+Never run test servers against `RetailParkingMonitor` you care about: create a throwaway `Tiam_*`
+DB and point `SECURITYCAM_DATABASE_URL` at it (they still write into `backend/data/retail_*`).
 
 - No `pytest` suite exists. `backend/scripts/` has standalone manual/integration scripts run
   directly with `python scripts/<name>.py` (e.g. `test_multi_camera.py` spins up a `TestClient`
@@ -78,7 +90,7 @@ gate on `Depends(auth.require_admin)` at the router level.
 
 ### Database schema (`app/models.py`)
 
-- **Camera** (`cameras`) — `id, name, source_type("ip"|"webcam"|"fisheye"|"fisheye_view"), protocol("rtsp"|"http"|
+- **Camera** (`cameras`) — `id, name, source_type("ip"|"webcam"|"fisheye"|"fisheye_view"|"file"), protocol("rtsp"|"http"|
   "https")?, ip?, port?, stream_path?, username?, password?` (plaintext camera creds),
   `device_index?, is_enabled(bool, default True)`, plus fisheye de-warp calibration (only
   meaningful when `source_type == "fisheye"`, null until calibrated on the Fisheye Setup page):
@@ -95,6 +107,12 @@ gate on `Depends(auth.require_admin)` at the router level.
   self-referencing cascades), `view_direction_deg?, view_tilt_deg?, view_fov_deg?` — only for
   `source_type == "fisheye_view"`: a virtual view cut out of the parent `"fisheye"` camera, with no
   connection settings of its own. See "Fisheye views" below.
+  `source_type == "file"`: `stream_path` is a file name inside `backend/data/retail_test_clips`
+  (validated: no paths outside it), read in a loop at the file's own fps – for tests and demos.
+  `site_id?` (plain INT → `sites`, assigned to the default site by `crud`).
+- **Site** (`sites`) — `id, name, site_type(hospital|mall|other), timezone (Pacific/Auckland),
+  after_hours_from/to ("20:00"/"06:00", the night window), trading_hours? (JSON), max_stay_hours?`.
+  One server per site (ADR 0004): one default row is seeded (`crud.seed_default_site`).
 - **ZoneType** (`zone_types`) — reusable rule presets. `id, name, description?, applies_to("person"|
   "vehicle"|"both", default "person"), rule_exclusion(bool), default_max_speed_kmh?,
   rule_stop_required(bool), default_stop_min_seconds(default 1.0), time_restriction_enabled(bool),
@@ -113,7 +131,8 @@ gate on `Depends(auth.require_admin)` at the router level.
   in `crud.activate_calibration`. A 4-point calibration becomes a homography
   (`config_loader.ground_homography`, image → ground metres) on `CalibrationConfig.homography`.
 - **Event** (`events`) — a fired alert/incident. `id, camera_id?, zone_id?, zone_name, policy_type`
-  (human-readable, from `risk.score_event`), `risk_score(int 1-10), track_id?`, `raw_payload`(JSON, full vision-engine
+  (human-readable, from `risk.score_event`), `event_type` (machine type, e.g. `exclusion`),
+  `has_clip` (raw clip + overlay, see "Incident pipeline and clips"), `risk_score(int 1-10), track_id?`, `raw_payload`(JSON, full vision-engine
   event dict), `timestamp, status("to_review"|"coached"|"dismissed"), has_snapshot(bool)`.
   **Dismissing deletes the event** (row + comments + snapshot JPEG in
   `backend/data/retail_event_snapshots/{id}.jpg`) rather than storing `status="dismissed"`, so "dismissed"
@@ -135,7 +154,8 @@ gate on `Depends(auth.require_admin)` at the router level.
   `crud.get_detection_settings`): `person_confidence, car_confidence, truck_confidence` (0.2; bus/
   motorcycle use car's), `person_min_aspect_ratio` (1.2), `detector_imgsz` (960),
   `confirmation_min_observations` (3) / `confirmation_window_frames` (6), `ignore_person_shadows`
-  (true). Saving restarts every camera worker.
+  (true), `detector_model` ("yolov8s.pt"; choices from `detection_engine.available_models`). Saving
+  restarts every camera worker.
 
 ### API surface (all under `/api`, all require login unless noted)
 
@@ -147,9 +167,11 @@ gate on `Depends(auth.require_admin)` at the router level.
 | `zones.py` | `/api/zones` | CRUD, optional `?camera_id=` filter on list; writes restart the affected camera's worker |
 | `zone_types.py` | `/api/zone-types` | CRUD; delete blocked (400) if `is_system` |
 | `calibration.py` | `/api/calibration` | CRUD + `GET /active?camera_id=`, `POST /{id}/activate` (deactivates siblings) |
-| `events.py` | `/api/events` | `GET ""` (filter by status/camera_id, paginated; no status = everything except dismissed), `PATCH /{id}` (status; `"dismissed"` hard-deletes via `delete_events_and_snapshots`), `POST /bulk-status` (`{ids[], status}`, max 1000; `"dismissed"` deletes), `GET /{id}/snapshot`, `POST /{id}/email` (Azure email, 503 if unconfigured), `GET|POST /{id}/comments` |
+| `events.py` | `/api/events` | `GET ""` (filter by status/camera_id, paginated; no status = everything except dismissed), `PATCH /{id}` (status; `"dismissed"` hard-deletes via `delete_events_and_snapshots`), `POST /bulk-status` (`{ids[], status}`, max 1000; `"dismissed"` deletes snapshot + clip too), `GET /{id}/snapshot`, `GET /{id}/clip` (mp4), `GET /{id}/clip-overlay` (JSON boxes), `POST /{id}/email` (Azure email, 503 if unconfigured), `GET|POST /{id}/comments` |
 | `incidents.py` | `/api/incidents` | `GET /search?q=` — natural-language search ("speeding on Gate 2 last week", "over 20 km/h"): `incident_search.parse_query` extracts rule type, camera, dates and a min speed |
-| `detection_settings.py` | `/api/detection-settings` | `GET ""`, `PUT ""` (restarts all workers) |
+| `detection_settings.py` | `/api/detection-settings` | admin: `GET ""`, `PUT ""` (restarts all workers), `GET /models` |
+| `sites.py` | `/api/sites` | `GET ""`; `PUT /{id}` (admin) |
+| `system.py` | `/api/system` | admin: `GET /metrics` (per-camera fps / ms per frame / incidents, GPU via pynvml, `data/retail_*` sizes, disk) |
 | `analytics.py` | `/api/analytics` | `GET /breaches-by-day`, `/risk-by-policy`, `/camera-leaderboard` |
 | `heatmap.py` | `/api/heatmap` | `GET /usage-options`, `/violation-options`, `/usage`, `/violations` (all return `{rows, cols, grid, max_count}`) |
 | `users.py` | `/api/users` | **admin-only**, CRUD + reset-password |
@@ -231,6 +253,34 @@ by the tracker after an occlusion; ByteTrack's `lost_track_buffer` is also raise
 
 Zones/calibration are loaded per-camera from the DB via `config_loader.load_zones_from_db`/
 `load_calibration_from_db`, called once in `VisionEngine.refresh_from_db()` at worker start.
+
+### Incident pipeline, clips, detectors (phase 1 of the car-park spec)
+
+- **Detection engine** (`app/detection_engine.py`, ADR 0007): `VisionEngine` only talks to a
+  `DetectionEngine` (`predict(frame, conf, imgsz, device) -> sv.Detections`, `class_names`).
+  `load_engine(model)` shares one engine per weights file across cameras. Only `UltralyticsEngine`
+  exists (AGPL – licence decision before first sale); a non-AGPL engine just implements the same two
+  members. Tests replace `vision_engine.load_engine` with a fake.
+- **Detectors** (`app/analytics/__init__.py`, spec 5.1): `Detector` protocol (`name`, `event_types`,
+  `update(FrameContext) -> [candidate event]`, `prune(live_track_ids)`). `VisionEngine(config,
+  detectors=[...])` runs them after the built-in zone rules (`_run_detectors`); `key_track_ids` in an
+  event marks those tracks as threats (red boxes). No network, no heavy models inside `update`.
+- **Incident pipeline** (`app/incident_pipeline.py`): after `_IncidentTracker` confirms an incident,
+  `IncidentPipeline.handle_frame` persists it (`crud.create_event`, sets `event_type`), writes the
+  snapshot, starts the clip and calls `_route` → `AlertDispatcher.dispatch` (today: `/ws/alerts`).
+  `_route` is where phase 2's AI verification plugs in.
+- **Clips** (`app/clips.py`, ADR 0008): per worker a `FrameRing` keeps the last 10 s of clean frames at
+  5 fps (JPEG + the boxes on that frame). On an incident a `ClipRecorder` collects 10 s more, then a
+  background thread writes `data/retail_event_clips/{id}.mp4` (raw H.264 via PyAV/libx264, real
+  capture timing, **millisecond time base for encoder and frames** – a 1/5 s encoder time base or the
+  muxer-changed stream time base made the mp4 muxer fail with error 22 on uneven frame times) and
+  `{id}.json` (per-frame boxes), then sets `has_clip`. Constants `CLIP_PRE_S/POST_S/FPS`.
+- **Metrics**: `_CameraWorker.metrics` (EMA fps, ms per frame, frames, incidents) → `GET /api/system/metrics`.
+- **Secrets** (`app/secrets_store.py`): Fernet with env `TIAM_SECRET_KEY` only (no fallback;
+  `available()` False → refuse to store). `install.ps1` generates it into `config.ps1`,
+  `start-server.ps1` exports it.
+- **Replay harness** (`scripts/replay.py`): video + YAML (zones, ground truth) through the real
+  `VisionEngine` + `_IncidentTracker` using video time; prints precision/recall per event type.
 
 ### Zone-only camera view
 
@@ -447,13 +497,16 @@ never grantable via `pages` — always admin-only.
 | `ZoneStudio.tsx` | `/admin/zones` | Canvas polygon editor over a camera snapshot to draw/save per-camera zones + rules (seeded from a Zone Type, then overridable). Each zone in the "existing zones" list has a Crop-icon toggle to restrict that camera's whole view + detection to just that zone (`PUT /api/cameras/{id}` with `restricted_zone_id`) — see "Zone-only camera view" above. |
 | `CalibrationTool.tsx` | `/admin/calibration` | Canvas line-draw tool over a camera snapshot to compute `pixels_per_meter` from a known real-world reference distance; multiple calibrations per camera, one "active". |
 | `FisheyeSetup.tsx` | `/admin/fisheye` | For `source_type="fisheye"` cameras: mark the lens circle (auto-detect or drag) and split the camera into named virtual views (`fisheye_view` cameras) with direction/tilt/zoom and live previews -- see "Fisheye views" above. |
-| `CoachingWorkbench.tsx` | `/coaching` | Event/incident review queue (All/To Review/Coached -- no Dismissed tab, dismissing deletes), per-card hover **Dismiss** button, Ctrl/Cmd+click toggle and Shift+click range multi-select with a top-right "N selected · Clear · Dismiss N" bar (`POST /api/events/bulk-status`, `window.confirm` first; Esc or tab change clears). Cards are `div role="button"` (not `<button>`) so the Dismiss button can nest. Detail modal: snapshot, raw payload incl. track id/speed, comments, status transitions, "email incident". |
+| `CoachingWorkbench.tsx` | `/coaching` | **"Incidents"** page (renamed). Review queue (All/Open/Resolved – stored as `to_review`/`coached`; no Dismissed tab, dismissing deletes); detail modal plays the clip (`components/EventClip.tsx`, boxes drawn on a canvas from the overlay JSON); per-card hover **Dismiss** button, Ctrl/Cmd+click toggle and Shift+click range multi-select with a top-right "N selected · Clear · Dismiss N" bar (`POST /api/events/bulk-status`, `window.confirm` first; Esc or tab change clears). Cards are `div role="button"` (not `<button>`) so the Dismiss button can nest. Detail modal: snapshot, raw payload incl. track id/speed, comments, status transitions, "email incident". |
 | `IncidentSearch.tsx` | `/incidents/search` | Free-text incident search (`GET /api/incidents/search`) with example queries. |
 | `DetectionSettings.tsx` | `/admin/detection-settings` | Admin-only: confidence thresholds, incident confirmation (N of M frames), shadow filter, detector resolution, min person aspect ratio. |
 | `Analytics.tsx` | `/analytics` | Recharts dashboards: breaches-by-day, risk-by-policy, camera leaderboard. |
 | `UsageHeatmap.tsx` | `/heatmap/usage` | Wraps shared `HeatmapView` for object-dwell heatmaps. |
 | `ViolationsHeatmap.tsx` | `/heatmap/violations` | Wraps shared `HeatmapView` for rule-violation location heatmaps. |
 | `Login.tsx` | `/login` | Auth form with the Tiam logo. |
+| `SystemStatus.tsx` | `/admin/system` | Admin-only: live worker fps / ms per frame / incidents, GPU, storage (polls every 3 s). |
+| `SiteSettings.tsx` | `/admin/site` | Admin-only: site name/type/timezone, after-hours window, max stay. |
+| `ChangePassword.tsx` | (none) | Shown by `RequireAuth` instead of the app while `user.must_change_password`. |
 | `UserManagement.tsx` | `/admin/users` | Admin-only: CRUD users, assign role, reset password. |
 | `RoleManagement.tsx` | `/admin/roles` | Admin-only: CRUD custom roles with a checkbox matrix over `PAGE_KEYS`. |
 

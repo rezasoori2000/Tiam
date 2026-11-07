@@ -9,3 +9,8 @@ azure-communication-email
 sqlalchemy
 pyodbc
 dateparser
+cryptography
+av
+pyyaml
+nvidia-ml-py
+pytest

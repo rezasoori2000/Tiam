@@ -25,13 +25,18 @@ import {
   XCircle,
 } from "lucide-react";
 import { api } from "../lib/api";
+import EventClip from "../components/EventClip";
 import type { Camera, Event, EventComment, EventStatus } from "../types";
 
 const TABS: { key: EventStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "to_review", label: "To Review" },
-  { key: "coached", label: "Coached" },
+  { key: "to_review", label: "Open" },
+  { key: "coached", label: "Resolved" },
 ];
+
+// Stored statuses keep their old names; the UI says Open / Resolved (spec 9.3).
+const STATUS_TEXT: Record<EventStatus, string> = { to_review: "Open", coached: "Resolved", dismissed: "Dismissed" };
+
 
 const STATUS_BADGE: Record<EventStatus, string> = {
   to_review: "dm-pill-amber",
@@ -190,7 +195,7 @@ function EventCard({
           {camera?.name ?? `Camera ${event.camera_id}`} &middot; {event.zone_name}
         </div>
         <div className="flex items-center justify-between pt-1">
-          <span className={STATUS_BADGE[event.status]}>{event.status.replace("_", " ")}</span>
+          <span className={STATUS_BADGE[event.status]}>{STATUS_TEXT[event.status]}</span>
           <span className="flex items-center gap-1 text-xs text-slate-500">
             <Clock className="h-3 w-3" /> {timeAgo(event.timestamp)}
           </span>
@@ -431,6 +436,13 @@ export function EventDetail({
             )}
           </div>
 
+          {event.has_clip && (
+            <div className="mt-4">
+              <div className="mb-1 text-xs text-muted">Clip (10 s before to 10 s after)</div>
+              <EventClip eventId={event.id} />
+            </div>
+          )}
+
           <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
             <div>
               <div className="text-xs text-slate-500">Camera</div>
@@ -480,7 +492,7 @@ export function EventDetail({
           <div className="mt-5 flex gap-2">
             {event.status !== "coached" && (
               <button onClick={() => onStatusChange(event.id, "coached")} className="dm-btn-primary !px-3 !py-1.5">
-                <CheckCircle2 className="h-4 w-4" /> Mark Coached
+                <CheckCircle2 className="h-4 w-4" /> Mark Resolved
               </button>
             )}
             {event.status !== "dismissed" && (
@@ -649,7 +661,7 @@ export default function CoachingWorkbench() {
     <div>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-slate-100">Coaching Workbench</h2>
+          <h2 className="text-xl font-semibold text-slate-100">Incidents</h2>
           <p className="mt-1 text-sm text-slate-400">
             Review flagged breaches, log coaching conversations, and close them out.
             <span className="text-slate-500"> Ctrl/Shift+click cards to select several.</span>

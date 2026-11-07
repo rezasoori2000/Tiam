@@ -8,6 +8,50 @@ got there and what's still unresolved. Newest first.
 
 ## 2026-11-08
 
+### Phase 1 – platform foundations (car-park spec section 14)
+
+**Why:** everything in phases 2-8 (AI verification, prowling, loitering, ANPR...) plugs into these.
+
+**What:**
+- `app/detection_engine.py` – pluggable detection engine (ADR 0007); `VisionEngine` no longer imports
+  Ultralytics directly. Detection Settings gets **Detector model** (`detector_model`, `GET /models`).
+- `app/analytics/` – detector contract (`Detector`, `FrameContext`, `TrackView`); `VisionEngine` runs
+  detectors after the zone rules, `key_track_ids` draw as threats.
+- `app/incident_pipeline.py` – persist → snapshot → clip → `_route` → `AlertDispatcher` (moved out of
+  `camera_manager._process_frame`; `_route` is phase 2's VLM hook).
+- `app/clips.py` – 10 s before / 10 s after raw H.264 clip + JSON box overlay per incident (ADR 0008),
+  written off the camera thread; `Event.has_clip`, `GET /api/events/{id}/clip|clip-overlay`,
+  dismissing deletes clips. UI: clip player with canvas overlay in the incident modal.
+- `Event.event_type` (machine type) stored and in the alert payload.
+- `source_type="file"` cameras (file name inside `data/retail_test_clips`, path-checked; loops at
+  the file's fps) + `scripts/replay.py` (precision/recall per event type; `--make-demo`).
+- `sites` table (default site seeded, `cameras.site_id`), `/api/sites`, admin **Site** page
+  (hospital defaults: Pacific/Auckland, after hours 20:00–06:00).
+- Admin **System** page + `GET /api/system/metrics` (worker fps / ms per frame / incidents, GPU,
+  storage).
+- `app/secrets_store.py` (Fernet, `TIAM_SECRET_KEY` env only); `install.ps1` generates the key into
+  `config.ps1`, `start-server.ps1` exports it.
+- pytest suite `backend/tests/` (20 tests, fake detection engine – no GPU/DB). Requirements: added
+  cryptography, av, pyyaml, nvidia-ml-py, pytest. `backend/data/` added to `.gitignore`.
+- UI wording (spec 9.3): "Coaching Workbench" → **Incidents**, statuses shown as **Open / Resolved**.
+
+**Bug found on the way:** clip writing failed on real cameras with FFmpeg error 22 (unit test with
+even 200 ms frames passed). Cause: the encoder time base was 1/5 s and frames were tagged with
+`stream.time_base`, which the mp4 muxer changes to 1/16000 once writing starts. Fixed with a fixed
+millisecond time base; regression test with uneven frame times added.
+
+**Verified:** pytest 20/20; `verify_logic.py` passes; replay of the synthetic demo: 3 incidents,
+precision/recall 100%; API smoke test on throwaway DB `Tiam_P1Test` (13/13: site seed/validation,
+file camera + path-traversal rejection, model list/validation, metrics, event_type); live end-to-end
+on throwaway DB `Tiam_P1Live` (file camera → worker → incident → snapshot → clip served → overlay
+spans pre+post → dismiss deletes clip); in Chrome against throwaway DB `Tiam_UiTest`: one-time
+password → forced change → app, Site and System pages, Incidents (Open/Resolved), clip player with
+red/amber boxes and confidences. All throwaway DBs dropped, test files deleted.
+
+**Open:** no real site footage yet (phase acceptance needs it). Clip length/fps are constants.
+The running dev server (`--reload`) migrated `RetailParkingMonitor` itself (new columns + default site, checked).
+
+
 ### Security fixes, spec grilling, ADRs (branch `retail-parking`)
 
 **Why:** ADR 0006 – before the code leaves the company network (GitHub), no secret may be in it.

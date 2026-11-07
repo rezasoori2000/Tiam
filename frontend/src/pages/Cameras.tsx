@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Aperture, LayoutGrid, Loader2, Pause, Pencil, Play, Plus, RotateCw, Save, Settings2, Trash2, Video, Wifi, X } from "lucide-react";
+import { Aperture, FileVideo, LayoutGrid, Loader2, Pause, Pencil, Play, Plus, RotateCw, Save, Settings2, Trash2, Video, Wifi, X } from "lucide-react";
 import { api } from "../lib/api";
 import type {
   Camera,
@@ -30,12 +30,15 @@ function cameraAddress(camera: Camera, cameras: Camera[]): string {
   if (camera.source_type === "webcam") {
     return `Server webcam #${camera.device_index ?? 0}`;
   }
+  if (camera.source_type === "file") {
+    return `Video file: ${camera.stream_path ?? ""} (looping)`;
+  }
   const auth = camera.username ? `${camera.username}@` : "";
   return `${camera.protocol}://${auth}${camera.ip}:${camera.port}${camera.stream_path ?? ""}`;
 }
 
 type Compression = "h264" | "h265" | "jpeg";
-type SourceType = "ip" | "webcam" | "quad" | "fisheye";
+type SourceType = "ip" | "webcam" | "quad" | "fisheye" | "file";
 
 interface FormState {
   name: string;
@@ -82,8 +85,8 @@ function formFromCamera(camera: Camera): FormState {
     ...INITIAL_FORM,
     name: camera.name,
     source_type:
-      camera.source_type === "webcam"
-        ? "webcam"
+      camera.source_type === "webcam" || camera.source_type === "file"
+        ? camera.source_type
         : camera.source_type === "fisheye" || camera.source_type === "fisheye_view"
           ? "fisheye"
           : "ip",
@@ -180,6 +183,8 @@ export default function Cameras() {
     const payload: Record<string, unknown> = { name: form.name.trim() };
     if (camera.source_type === "webcam") {
       payload.device_index = Number(form.device_index) || 0;
+    } else if (camera.source_type === "file") {
+      payload.stream_path = form.stream_path.trim();
     } else if (camera.source_type === "ip" || camera.source_type === "fisheye") {
       payload.protocol = form.protocol;
       payload.ip = form.ip.trim();
@@ -232,7 +237,9 @@ export default function Cameras() {
         }
       } else {
         const payload: CameraCreatePayload =
-          form.source_type === "webcam"
+          form.source_type === "file"
+            ? { name: form.name, source_type: "file", stream_path: form.stream_path.trim() }
+            : form.source_type === "webcam"
             ? {
                 name: form.name,
                 source_type: "webcam",
@@ -323,7 +330,7 @@ export default function Cameras() {
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          {(["ip", "quad", "fisheye", "webcam"] as const).map((type) => (
+          {(["ip", "quad", "fisheye", "webcam", "file"] as const).map((type) => (
             <button
               key={type}
               type="button"
@@ -340,13 +347,16 @@ export default function Cameras() {
               {type === "quad" && <LayoutGrid className="h-4 w-4" />}
               {type === "fisheye" && <Aperture className="h-4 w-4" />}
               {type === "webcam" && <Video className="h-4 w-4" />}
+              {type === "file" && <FileVideo className="h-4 w-4" />}
               {type === "ip"
                 ? "IP Camera"
                 : type === "quad"
                   ? "4-Lens Camera"
                   : type === "fisheye"
                     ? "Fisheye Camera"
-                    : "Server Webcam"}
+                    : type === "file"
+                      ? "Video File (test)"
+                      : "Server Webcam"}
             </button>
           ))}
         </div>
@@ -549,6 +559,21 @@ export default function Cameras() {
                 })}
               </div>
             </>
+          ) : form.source_type === "file" ? (
+            <label className="col-span-2 text-sm">
+              <span className="dm-label">Video file</span>
+              <input
+                required
+                value={form.stream_path}
+                onChange={(e) => setForm((f) => ({ ...f, stream_path: e.target.value }))}
+                placeholder="e.g. demo_bus.mp4"
+                className="dm-input"
+              />
+              <span className="mt-1 block text-xs text-muted">
+                File name inside <span className="font-mono">backend/data/retail_test_clips</span> on the server. It loops
+                at its own frame rate, like a live camera (for testing and demos).
+              </span>
+            </label>
           ) : (
             <label className="text-sm">
               <span className="dm-label">Device index</span>

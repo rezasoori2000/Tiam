@@ -5,7 +5,9 @@ import {
   BarChart3,
   Camera,
   Flame,
-  GraduationCap,
+  Activity,
+  BellRing,
+  Building2,
   ListChecks,
   LogOut,
   Ruler,
@@ -28,7 +30,7 @@ const NAV_ITEMS = [
   { to: "/admin/zones", label: "Zone Studio", icon: ShieldAlert },
   { to: "/admin/calibration", label: "Calibration Tool", icon: Ruler },
   { to: "/admin/fisheye", label: "Fisheye Setup", icon: Aperture },
-  { to: "/coaching", label: "Coaching Workbench", icon: GraduationCap },
+  { to: "/coaching", label: "Incidents", icon: BellRing },
   { to: "/incidents/search", label: "Incident Search", icon: Search },
   { to: "/analytics", label: "Analytics & Reports", icon: BarChart3 },
   { to: "/heatmap/usage", label: "Usage Heatmap", icon: Flame },
@@ -39,6 +41,8 @@ const ADMIN_ITEMS = [
   { to: "/admin/users", label: "User Management", icon: Users },
   { to: "/admin/roles", label: "Role Management", icon: ShieldCheck },
   { to: "/admin/detection-settings", label: "Detection Settings", icon: SlidersHorizontal },
+  { to: "/admin/site", label: "Site", icon: Building2 },
+  { to: "/admin/system", label: "System", icon: Activity },
 ];
 
 function StatusBadge({ label, connected }: { label: string; connected: boolean }) {

@@ -42,4 +42,15 @@ if (-not (Test-Path $config)) {
     Copy-Item (Join-Path $root "config.example.ps1") $config
     Write-Host "Created config.ps1 -- review it before continuing." -ForegroundColor Yellow
 }
+# One random secret-encryption key per install (never a default -- see ADR 0006).
+$configText = Get-Content $config -Raw
+if ($configText -match '\$TiamSecretKey\s*=\s*""') {
+    $key = & $py -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    if ($LASTEXITCODE -ne 0 -or -not $key) { throw "Could not generate TiamSecretKey" }
+    $configText = $configText -replace '\$TiamSecretKey\s*=\s*""', ('$TiamSecretKey = "' + $key.Trim() + '"')
+    Set-Content -Path $config -Value $configText -Encoding utf8 -NoNewline
+    Write-Host "Generated TiamSecretKey in config.ps1 -- back it up." -ForegroundColor Yellow
+} elseif ($configText -notmatch '\$TiamSecretKey') {
+    Write-Warning "config.ps1 has no `$TiamSecretKey line (older install): add one from config.example.ps1 and re-run install.ps1."
+}
 Write-Host "Install complete. Next: setup-database.ps1" -ForegroundColor Green

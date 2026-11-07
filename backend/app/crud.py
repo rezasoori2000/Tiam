@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 def create_camera(db: Session, camera_in: schemas.CameraCreate) -> models.Camera:
     camera = models.Camera(**camera_in.model_dump())
+    if camera.site_id is None:
+        camera.site_id = get_default_site(db).id
     db.add(camera)
     db.commit()
     db.refresh(camera)
@@ -426,6 +428,7 @@ def create_event(db: Session, event: dict) -> models.Event:
         camera_id=event.get("camera_id"),
         zone_id=int(event["zone_id"]) if event.get("zone_id") is not None else None,
         zone_name=event.get("zone_name", ""),
+        event_type=event.get("type"),
         policy_type=policy_type,
         risk_score=risk_score,
         track_id=event.get("track_id"),
@@ -531,6 +534,7 @@ def to_alert_payload(event: models.Event) -> dict:
         "camera_id": event.camera_id,
         "zone_name": event.zone_name,
         "policy_type": event.policy_type,
+        "event_type": event.event_type,
         "risk_score": event.risk_score,
         "timestamp": event.timestamp.isoformat(),
     }
@@ -594,3 +598,43 @@ def get_heatmap_grid(
     for row in rows:
         grid[row.grid_row][row.grid_col] += row.count
     return grid
+
+
+# ------------------------------------------------------------------- sites
+
+def get_sites(db: Session) -> List[models.Site]:
+    return list(db.scalars(select(models.Site).order_by(models.Site.id)))
+
+
+def get_site(db: Session, site_id: int) -> Optional[models.Site]:
+    return db.get(models.Site, site_id)
+
+
+def get_default_site(db: Session) -> models.Site:
+    site = db.scalar(select(models.Site).order_by(models.Site.id))
+    if site is None:
+        site = models.Site(name="Main car park")
+        db.add(site)
+        db.commit()
+        db.refresh(site)
+    return site
+
+
+def seed_default_site(db: Session) -> None:
+    """One site always exists; cameras created before sites existed are assigned to it."""
+    site = get_default_site(db)
+    db.execute(update(models.Camera).where(models.Camera.site_id.is_(None)).values(site_id=site.id))
+    db.commit()
+
+
+def update_site(db: Session, site: models.Site, data: "schemas.SiteUpdate") -> models.Site:
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(site, field, value)
+    db.commit()
+    db.refresh(site)
+    return site
+
+
+def mark_event_has_clip(db: Session, event_id: int) -> None:
+    db.execute(update(models.Event).where(models.Event.id == event_id).values(has_clip=True))
+    db.commit()

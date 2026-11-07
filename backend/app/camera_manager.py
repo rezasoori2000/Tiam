@@ -25,8 +25,9 @@ os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
 import cv2
 import numpy as np
 
-from . import crud, fisheye, heatmap
+from . import clips, crud, fisheye, heatmap
 from .config import CalibrationConfig, EngineConfig
+from .incident_pipeline import AlertDispatcher, IncidentPipeline
 from .database import SessionLocal
 from .models import Camera
 from .vision_engine import VisionEngine
@@ -52,6 +53,9 @@ STREAM_JPEG_QUALITY = 92  # live stream, snapshots and event images (was 80/85)
 # DBs number events from 1, so a shared folder would overwrite/delete the other system's snapshots.
 SNAPSHOTS_DIR = Path(__file__).resolve().parent.parent / "data" / "retail_event_snapshots"
 SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+# Video files for source_type="file" cameras (tests, demos, replay). Kept out of git.
+TEST_CLIPS_DIR = Path(__file__).resolve().parent.parent / "data" / "retail_test_clips"
+TEST_CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def event_snapshot_path(event_id: int, zones: bool = True) -> Path:
@@ -321,6 +325,7 @@ class _SharedCapture:
             return
         source = _CameraWorker._capture_source(camera)
         is_fisheye = camera.source_type == "fisheye"
+        is_file = camera.source_type == "file"
         last_jpeg_at = 0.0
         try:
             while not stop_event.is_set():
@@ -333,13 +338,26 @@ class _SharedCapture:
                     continue
                 self.status = "connected"
                 self.last_error = None
+                # A file is read as fast as the disk allows: pace it to its own fps, like a camera.
+                file_interval = 1.0 / (cap.get(cv2.CAP_PROP_FPS) or 25.0) if is_file else 0.0
+                next_at = time.time()
                 try:
                     while not stop_event.is_set():
                         ok, frame = cap.read()
+                        if not ok and is_file:
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # loop
+                            ok, frame = cap.read()
                         if not ok:
                             self.status = "reconnecting"
                             self.last_error = "frame read failed"
                             break
+                        if is_file:
+                            next_at += file_interval
+                            delay = next_at - time.time()
+                            if delay > 0:
+                                stop_event.wait(delay)
+                            else:
+                                next_at = time.time()
                         with self._cond:
                             self._frame = frame
                             self._frame_ts = time.time()
@@ -413,6 +431,15 @@ class _CameraWorker:
         # written per-frame -- see _flush_heatmap).
         self._heatmap_counts: Dict[Tuple[str, str], np.ndarray] = {}
         self._last_heatmap_flush = time.time()
+        # Event clips (app/clips.py) and the persist -> clip -> alert step (app/incident_pipeline.py).
+        self._ring = clips.FrameRing()
+        self._recorder = clips.ClipRecorder(on_written=_mark_clip_written)
+        self._pipeline = IncidentPipeline(
+            camera_id, AlertDispatcher(self._push_alert), self._recorder,
+            snapshot_path=event_snapshot_path, jpeg_quality=STREAM_JPEG_QUALITY,
+        )
+        # For the System page: exponential moving averages over processed frames.
+        self.metrics = {"fps": 0.0, "process_ms": 0.0, "frames": 0, "incidents": 0}
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -442,6 +469,8 @@ class _CameraWorker:
     def _capture_source(camera: Camera):
         if camera.source_type == "webcam":
             return camera.device_index or 0
+        if camera.source_type == "file":
+            return str(TEST_CLIPS_DIR / (camera.stream_path or ""))
         if camera.username:
             user = urllib.parse.quote(camera.username, safe="")
             pwd = urllib.parse.quote(camera.password or "", safe="")
@@ -485,7 +514,7 @@ class _CameraWorker:
             camera_id=self.camera_id,
             zones=[],
             calibration=CalibrationConfig(),
-            detector_model_path="yolov8s.pt",
+            detector_model_path=settings.detector_model or "yolov8s.pt",
             detection_conf=detection_conf,
             person_confidence=settings.person_confidence,
             car_confidence=settings.car_confidence,
@@ -561,39 +590,26 @@ class _CameraWorker:
 
         annotated, events = engine.process_frame(frame, ts)
         self._record_usage(engine.last_tracks, engine.output_frame_size)
+        # Clean frame + this frame's boxes into the clip ring (raw clips, ADR 0008).
+        ring_item = self._ring.add(ts, resized, clips.boxes_from_tracks(engine.last_tracks))
+        self._recorder.on_frame(ring_item)
 
         ok_enc, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
-        if ok_enc:
-            self._push_frame(jpeg.tobytes())
+        stream_jpeg = jpeg.tobytes() if ok_enc else None
+        if stream_jpeg:
+            self._push_frame(stream_jpeg)
 
         now = time.time()
-        snapshot_jpeg: Optional[bytes] = None
         self._incidents.start_frame()
+        new_incidents = []
         for ev in events:
             if not self._incidents.observe(ev, now):
                 continue  # not yet confirmed, or already recorded for this ongoing breach
-
             self._record_violation(ev, engine.output_frame_size)
-            ev["camera_id"] = self.camera_id
-            row = crud.create_event(db, ev)
-            if snapshot_jpeg is None:
-                # The annotated frame (box/banner drawn) plus the zone
-                # outlines, which the live stream leaves out, is the
-                # violation snapshot for the Coaching Workbench. Encoded once
-                # per frame, however many events it raised.
-                with_zones = annotated.copy()
-                engine.draw_zones(with_zones)
-                ok_snapshot, encoded = cv2.imencode(
-                    ".jpg", with_zones, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
-                )
-                snapshot_jpeg = encoded.tobytes() if ok_snapshot else b""
-            if snapshot_jpeg:
-                event_snapshot_path(row.id).write_bytes(snapshot_jpeg)
-                if ok_enc:  # the stream frame is the same image minus the zones
-                    event_snapshot_path(row.id, zones=False).write_bytes(jpeg.tobytes())
-                crud.mark_event_has_snapshot(db, row)
-            self._push_alert(crud.to_alert_payload(row))
-
+            new_incidents.append(ev)
+        if new_incidents:
+            self._pipeline.handle_frame(db, new_incidents, annotated, stream_jpeg, engine.draw_zones, self._ring, ts)
+            self.metrics["incidents"] += len(new_incidents)
         self._incidents.prune(now)
 
     def _frames(self, camera: Camera):
@@ -666,6 +682,7 @@ class _CameraWorker:
                 t0 = time.time()
                 frame = self._dewarp(camera, frame, engine.config.frame_size)
                 self._process_frame(db, engine, frame, frame_ts)
+                self._update_metrics(t0)
 
                 if time.time() - self._last_heatmap_flush >= HEATMAP_FLUSH_INTERVAL_S:
                     self._flush_heatmap(db)
@@ -678,8 +695,28 @@ class _CameraWorker:
             self.status = "error"
             self.last_error = self._redact_source(exc)
         finally:
+            self._recorder.flush()
             self._flush_heatmap(db)
             db.close()
+
+    def _update_metrics(self, t0: float) -> None:
+        now = time.time()
+        m = self.metrics
+        m["process_ms"] = 0.9 * m["process_ms"] + 0.1 * (now - t0) * 1000 if m["frames"] else (now - t0) * 1000
+        last = m.get("_last_at")
+        if last is not None and now > last:
+            m["fps"] = 0.9 * m["fps"] + 0.1 / (now - last) if m["fps"] else 1.0 / (now - last)
+        m["_last_at"] = now
+        m["frames"] += 1
+
+
+def _mark_clip_written(event_id: int) -> None:
+    """Called from the clip-writer thread once a clip is on disk."""
+    db = SessionLocal()
+    try:
+        crud.mark_event_has_clip(db, event_id)
+    finally:
+        db.close()
 
 
 _workers: Dict[int, _CameraWorker] = {}
@@ -820,3 +857,16 @@ def get_latest_fisheye_raw_frame(camera_id: int) -> Optional[np.ndarray]:
     auto-detection on the Fisheye Setup page)."""
     shared = _shared_captures.get(camera_id)
     return shared.latest_frame() if shared else None
+
+
+def get_metrics() -> list:
+    """Per-camera worker metrics for the System page."""
+    out = []
+    for camera_id, w in list(_workers.items()):
+        m = {k: v for k, v in w.metrics.items() if not k.startswith("_")}
+        out.append({
+            "camera_id": camera_id, "status": w.status, "fps": round(m["fps"], 1),
+            "process_ms": round(m["process_ms"], 1), "frames": m["frames"], "incidents": m["incidents"],
+            "stream_queue": w.frame_queue.qsize(),
+        })
+    return out

@@ -1,12 +1,11 @@
-"""Stage 1: multi-zone hazard detection, speed estimation, and PPE checks.
+"""Per-camera detection pipeline.
 
-Pipeline per frame: YOLO detection -> ByteTrack -> per-track zone/speed/PPE
-rule evaluation -> annotated frame + list of alert events.
+Per frame: detection engine -> filters -> ByteTrack -> zone rules (exclusion/speed/stop) +
+analytics detectors -> annotated frame + list of candidate events.
 """
 from __future__ import annotations
 
 import logging
-import threading
 import time
 import warnings
 from collections import defaultdict, deque
@@ -18,9 +17,9 @@ import cv2
 import numpy as np
 import supervision as sv
 from sqlalchemy.orm import Session
-from ultralytics import YOLO
-
 from . import config_loader
+from .analytics import CandidateEvent, Detector, FrameContext, TrackView
+from .detection_engine import load_engine
 from .config import EngineConfig, Zone
 
 logger = logging.getLogger(__name__)
@@ -81,30 +80,6 @@ def _compare_to_floor(hsv: np.ndarray, floor: np.ndarray) -> Tuple[np.ndarray, n
     return same_colour, v / max(floor_v, 1.0)
 
 
-# Every camera runs its own VisionEngine (own tracker/history/zones), but
-# cameras sharing a model path (the common case -- everyone uses the same
-# yolov8s.pt) must NOT each load their own copy of the weights:
-# with N cameras that's N copies of the same file resident on the GPU for no
-# benefit. Cache loaded models by path and hand out the shared instance.
-#
-# YOLO.predict() is not safe to call concurrently on the same instance (it
-# mutates an internal predictor object), so each cached model gets its own
-# lock that every caller must hold for the duration of a predict() call.
-_model_cache: Dict[str, YOLO] = {}
-_model_cache_lock = threading.Lock()
-_model_predict_locks: Dict[str, threading.Lock] = {}
-
-
-def _get_shared_model(path: str) -> Tuple[YOLO, threading.Lock]:
-    with _model_cache_lock:
-        model = _model_cache.get(path)
-        if model is None:
-            model = YOLO(path)
-            _model_cache[path] = model
-            _model_predict_locks[path] = threading.Lock()
-        return model, _model_predict_locks[path]
-
-
 @dataclass
 class _TrackInfo:
     track_id: int
@@ -120,12 +95,14 @@ class _TrackInfo:
 
 
 class VisionEngine:
-    def __init__(self, config: EngineConfig):
+    def __init__(self, config: EngineConfig, detectors: Optional[List[Detector]] = None):
         self.config = config
 
-        self.detector, self._detector_lock = _get_shared_model(config.detector_model_path)
-        self.detector_names = self.detector.model.names
-        self.class_names: Dict[int, str] = dict(self.detector_names)
+        # Shared per model across cameras (detection_engine.load_engine); swappable engine, ADR 0007.
+        self.engine = load_engine(config.detector_model_path)
+        self.class_names: Dict[int, str] = dict(self.engine.class_names)
+        # Analytics detectors (app/analytics), run after the built-in zone rules.
+        self.detectors: List[Detector] = list(detectors or [])
 
         with warnings.catch_warnings():
             # supervision 0.30 flags ByteTrack as deprecated (removal in 0.31)
@@ -241,6 +218,10 @@ class VisionEngine:
             self._track_last_seen.pop(track_id, None)
             self._stop_progress.pop(track_id, None)
             self._track_last_zone_hits.pop(track_id, None)
+        if stale_ids:
+            live = set(self._track_last_seen)
+            for detector in self.detectors:
+                detector.prune(live)
 
 
 
@@ -581,12 +562,10 @@ class VisionEngine:
         # The main detector (+ tracker) runs every frame, on the full
         # frame_size frame -- shrinking it made distant/small people fall
         # below what YOLOv8s can reliably pick up.
-        with self._detector_lock:
-            results = self.detector.predict(
-                detect_frame, verbose=False, device=self.config.device,
-                conf=self.config.detection_conf, imgsz=self.config.detector_imgsz,
-            )[0]
-        detections = sv.Detections.from_ultralytics(results)
+        detections = self.engine.predict(
+            detect_frame, conf=self.config.detection_conf,
+            imgsz=self.config.detector_imgsz, device=self.config.device,
+        )
         detections = self._filter_implausible_person_boxes(detections)
         detections = self._filter_by_class_confidence(detections)
         detections = self._dedup_vehicle_detections(detections)
@@ -645,6 +624,7 @@ class VisionEngine:
         self.last_tracks = tracks
 
         events.extend(self._apply_rules(tracks, ts))
+        events.extend(self._run_detectors(tracks, frame, ts))
 
         self._frames_since_prune += 1
         if self._frames_since_prune >= PRUNE_INTERVAL_FRAMES:
@@ -667,6 +647,28 @@ class VisionEngine:
         # opt-in overlay, and event snapshots add them via draw_zones().
         self._draw_alert_banner(annotated, banner_messages)
         return annotated, events
+
+    def _run_detectors(self, tracks: List[_TrackInfo], frame: np.ndarray, ts: float) -> List[CandidateEvent]:
+        """Runs the analytics detectors; tracks named in an event's key_track_ids are drawn as threats."""
+        if not self.detectors:
+            return []
+        ctx = FrameContext(
+            camera_id=self.config.camera_id, ts=ts, frame=frame, calibration=self.config.calibration,
+            zones=self.config.zones,
+            tracks=[TrackView(
+                track_id=t.track_id, class_name=t.class_name, kind=t.kind, xyxy=t.xyxy, point=t.point,
+                speed_kmh=t.speed_kmh, zone_hits=list(t.zone_hits), confidence=t.confidence,
+            ) for t in tracks],
+        )
+        by_id = {t.track_id: t for t in tracks}
+        events: List[CandidateEvent] = []
+        for detector in self.detectors:
+            for ev in detector.update(ctx):
+                for tid in ev.get("key_track_ids", []):
+                    if tid in by_id:
+                        by_id[tid].alerts.append(ev["type"])
+                events.append(ev)
+        return events
 
     def _apply_rules(self, tracks: List[_TrackInfo], ts: float) -> List[dict]:
         """Evaluates exclusion/speed/stop rules against pre-built

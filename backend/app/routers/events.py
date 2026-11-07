@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from .. import camera_manager, crud, email_service, schemas
+from .. import camera_manager, clips, crud, email_service, schemas
 from ..database import get_db
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -17,6 +17,7 @@ def delete_events_and_snapshots(db: Session, ids: list[int]) -> int:
     for event_id in deleted:
         camera_manager.event_snapshot_path(event_id).unlink(missing_ok=True)
         camera_manager.event_snapshot_path(event_id, zones=False).unlink(missing_ok=True)
+        clips.delete_clip(event_id)
     return len(deleted)
 
 
@@ -75,6 +76,25 @@ def get_event_snapshot(event_id: int, zones: bool = True, db: Session = Depends(
     if not event.has_snapshot or not path.exists():
         raise HTTPException(status_code=404, detail="No snapshot recorded for this event")
     return FileResponse(path, media_type="image/jpeg")
+
+
+@router.get("/{event_id}/clip")
+def get_event_clip(event_id: int, db: Session = Depends(get_db)):
+    """Raw H.264 clip (ADR 0008); boxes come from /clip-overlay."""
+    event = crud.get_event(db, event_id)
+    path = clips.clip_path(event_id)
+    if event is None or not event.has_clip or not path.exists():
+        raise HTTPException(status_code=404, detail="No clip recorded for this event")
+    return FileResponse(path, media_type="video/mp4")
+
+
+@router.get("/{event_id}/clip-overlay")
+def get_event_clip_overlay(event_id: int, db: Session = Depends(get_db)):
+    event = crud.get_event(db, event_id)
+    path = clips.overlay_path(event_id)
+    if event is None or not event.has_clip or not path.exists():
+        raise HTTPException(status_code=404, detail="No clip recorded for this event")
+    return FileResponse(path, media_type="application/json")
 
 
 @router.post("/{event_id}/email", status_code=204)

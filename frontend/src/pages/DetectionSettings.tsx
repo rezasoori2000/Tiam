@@ -12,6 +12,7 @@ interface FormState {
   confirmation_min_observations: string;
   confirmation_window_frames: string;
   ignore_person_shadows: boolean;
+  detector_model: string;
 }
 
 // Mirrors the backend model's column defaults (models.DetectionSettings).
@@ -27,6 +28,7 @@ function toFormState(s: DetectionSettings): FormState {
     confirmation_min_observations: String(s.confirmation_min_observations),
     confirmation_window_frames: String(s.confirmation_window_frames),
     ignore_person_shadows: s.ignore_person_shadows,
+    detector_model: s.detector_model,
   };
 }
 
@@ -40,6 +42,7 @@ function toPayload(f: FormState): DetectionSettingsUpdatePayload {
     confirmation_min_observations: Math.max(1, Math.round(Number(f.confirmation_min_observations))),
     confirmation_window_frames: Math.max(1, Math.round(Number(f.confirmation_window_frames))),
     ignore_person_shadows: f.ignore_person_shadows,
+    detector_model: f.detector_model,
   };
 }
 
@@ -73,12 +76,14 @@ export default function DetectionSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
 
   useEffect(() => {
     api.get<DetectionSettings>("/api/detection-settings").then((res) => {
       setForm(toFormState(res.data));
       setLoading(false);
     });
+    api.get<string[]>("/api/detection-settings/models").then((res) => setModels(res.data)).catch(() => {});
   }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -229,6 +234,25 @@ export default function DetectionSettingsPage() {
             shadow -- so it can't raise exclusion alerts.
           </p>
           <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 text-sm">
+              <span className="dm-label">Detector model</span>
+              <select
+                value={form.detector_model}
+                onChange={(e) => setForm((f) => f && { ...f, detector_model: e.target.value })}
+                className="dm-input"
+              >
+                {[...new Set([form.detector_model, ...models])].map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                    {m === "yolov8s.pt" ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted">
+                Weights for the person/vehicle detector: the default or any .pt file in backend/models.
+                Switch only after a replay comparison on site footage shows it's at least as good.
+              </span>
+            </label>
             <label className="text-sm">
               <span className="dm-label">Detection resolution</span>
               <select

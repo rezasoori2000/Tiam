@@ -71,3 +71,6 @@ deploy/config.ps1
 
 # Local dev runner state
 .dev-pids.json
+
+# Runtime data: incident snapshots/clips, test videos, embeddings (never in git)
+backend/data/

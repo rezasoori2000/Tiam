@@ -9,7 +9,7 @@ Point = List[float]
 
 class CameraBase(BaseModel):
     name: str
-    source_type: Literal["ip", "webcam", "fisheye", "fisheye_view"]
+    source_type: Literal["ip", "webcam", "fisheye", "fisheye_view", "file"]
     protocol: Optional[Literal["rtsp", "http", "https"]] = None
     ip: Optional[str] = None
     port: Optional[int] = None
@@ -31,6 +31,7 @@ class CameraBase(BaseModel):
     view_direction_deg: Optional[float] = None
     view_tilt_deg: Optional[float] = None
     view_fov_deg: Optional[float] = None
+    site_id: Optional[int] = None
 
     @model_validator(mode="after")
     def _validate_source_fields(self) -> "CameraBase":
@@ -43,6 +44,13 @@ class CameraBase(BaseModel):
         elif self.source_type == "fisheye_view":
             if self.fisheye_parent_id is None:
                 raise ValueError("fisheye_view cameras require fisheye_parent_id")
+        elif self.source_type == "file":
+            # A looping video file for tests/demos, named relative to data/retail_test_clips --
+            # never an arbitrary server path.
+            name = (self.stream_path or "").replace("\\", "/").strip("/")
+            if not name or ".." in name.split("/") or ":" in name:
+                raise ValueError("file cameras need stream_path = a file name inside data/retail_test_clips")
+            self.stream_path = name
         return self
 
 
@@ -291,6 +299,7 @@ class DetectionSettingsOut(BaseModel):
     confirmation_min_observations: int
     confirmation_window_frames: int
     ignore_person_shadows: bool
+    detector_model: str
 
 
 class DetectionSettingsUpdate(BaseModel):
@@ -302,6 +311,7 @@ class DetectionSettingsUpdate(BaseModel):
     confirmation_min_observations: Optional[int] = None
     confirmation_window_frames: Optional[int] = None
     ignore_person_shadows: Optional[bool] = None
+    detector_model: Optional[str] = None
 
     @field_validator(
         "person_confidence", "car_confidence", "truck_confidence",
@@ -370,6 +380,8 @@ class EventOut(BaseModel):
     timestamp: datetime.datetime
     status: EventStatus
     has_snapshot: bool
+    event_type: Optional[str] = None
+    has_clip: bool = False
 
 
 class EventUpdate(BaseModel):
@@ -505,3 +517,42 @@ class EventCommentOut(BaseModel):
     event_id: int
     text: str
     created_at: datetime.datetime
+
+
+# ------------------------------------------------------------------- sites
+
+SiteType = Literal["hospital", "mall", "other"]
+_HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class SiteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    site_type: SiteType
+    timezone: str
+    after_hours_from: str
+    after_hours_to: str
+    trading_hours: Optional[dict] = None
+    max_stay_hours: Optional[float] = None
+
+
+class SiteUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    site_type: Optional[SiteType] = None
+    timezone: Optional[str] = None
+    after_hours_from: Optional[str] = Field(default=None, pattern=_HHMM)
+    after_hours_to: Optional[str] = Field(default=None, pattern=_HHMM)
+    trading_hours: Optional[dict] = None
+    max_stay_hours: Optional[float] = Field(default=None, gt=0)
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_timezone(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            import zoneinfo
+            try:
+                zoneinfo.ZoneInfo(v)
+            except Exception:
+                raise ValueError(f"unknown timezone {v!r}")
+        return v

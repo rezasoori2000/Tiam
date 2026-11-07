@@ -67,6 +67,8 @@ class Camera(Base):
     view_direction_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
     view_tilt_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
     view_fov_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Site this camera belongs to (plain INT like restricted_zone_id; crud assigns the default site).
+    site_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
 
 class ZoneType(Base):
@@ -155,6 +157,10 @@ class Event(Base):
     # "to_review" | "coached" | "dismissed"
     status: Mapped[str] = mapped_column(String, default="to_review", nullable=False)
     has_snapshot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Machine event type ("exclusion", "speeding", "car_prowling"...); policy_type is the human label.
+    event_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Raw clip data/retail_event_clips/{id}.mp4 + box overlay {id}.json (ADR 0008).
+    has_clip: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class Role(Base):
@@ -245,6 +251,8 @@ class DetectionSettings(Base):
     confirmation_window_frames: Mapped[int] = mapped_column(Integer, default=6, nullable=False)
     # Drop person detections that are another person's shadow (EngineConfig.ignore_person_shadows)
     ignore_person_shadows: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Weights file for the detection engine (detection_engine.available_models), ADR 0007.
+    detector_model: Mapped[str] = mapped_column(String(255), default="yolov8s.pt", nullable=False)
 
 
 class EventComment(Base):
@@ -256,3 +264,20 @@ class EventComment(Base):
     )
     text: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+
+
+class Site(Base):
+    """One car-park property. One Tiam server per site (ADR 0004); a default row is seeded and every
+    camera without a site is assigned to it."""
+    __tablename__ = "sites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    site_type: Mapped[str] = mapped_column(String(20), default="hospital", nullable=False)  # hospital|mall|other
+    timezone: Mapped[str] = mapped_column(String(64), default="Pacific/Auckland", nullable=False)
+    # Night window when after-hours rules apply ("HH:MM"; wraps past midnight). Hospital default 20-06.
+    after_hours_from: Mapped[str] = mapped_column(String(5), default="20:00", nullable=False)
+    after_hours_to: Mapped[str] = mapped_column(String(5), default="06:00", nullable=False)
+    # Optional per-weekday opening hours, e.g. {"mon": ["07:00", "21:00"], ...}; null = open 24/7.
+    trading_hours: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    max_stay_hours: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -13,6 +13,7 @@ $odbc = Get-OdbcConnectionString $SqlDatabase
 $env:SECURITYCAM_DATABASE_URL = "mssql+pyodbc:///?odbc_connect=" + [uri]::EscapeDataString($odbc)
 if ($AzureEmailConnectionString) { $env:AzureCommunicationServiceConnectionString = $AzureEmailConnectionString }
 if ($AzureEmailSender) { $env:AzureCommunicationServicesSenderEmail = $AzureEmailSender }
+if ($TiamSecretKey) { $env:TIAM_SECRET_KEY = $TiamSecretKey }
 
 # Model paths like "yolov8s.pt" are relative, so run from backend\.
 Set-Location $backend
