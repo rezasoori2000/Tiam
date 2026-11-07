@@ -839,6 +839,14 @@ replacement is decided before the first sale, and phase 1 makes the detector eng
 (ADR 0007). Plate models: `fast-plate-ocr` + `open-image-models` detector, pending its weights
 licence (ADR 0002). Security fixes (ADR 0006) done. This spec lives in `docs/spec/`.
 
+**Round 4 (2026-11-08):** clips are stored raw with a JSON box overlay (ADR 0008, overrides 5.3's
+"annotated boxes drawn"); `TIAM_SECRET_KEY` comes only from the environment – `install.ps1`
+generates it into `config.ps1`, and CLAUDE.md gets a one-line dev command to create it (no file
+fallback); hospital default **after-hours window 20:00–06:00** (site setting, zones can override);
+operating model = **24/7 security control room**: alerts go to the operator console first, and an
+incident with risk ≥ 8 not acknowledged within **2 minutes** escalates by SMS to the security
+supervisor (F15 defaults).
+
 Each has a default already applied in this spec. Confirm or change:
 
 1. **VLM default provider for development** – cloud (OpenAI-compatible / Anthropic / Gemini) since

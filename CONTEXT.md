@@ -31,6 +31,9 @@ these terms are in `docs/adr/`. The full feature spec is `docs/spec/Tiam-CarPark
 | **Escort** | Virtual-escort session for a staff member walking to their car. |
 | **Deterrence action** | Speaker message, strobe, siren or PTZ preset triggered on site. |
 | **Evidence pack** | Exported ZIP (clip, snapshots, plates, timeline, hashes) for one incident. |
+| **After hours** | The site's night window (hospital default 20:00–06:00); many rules are stricter or only active then. Zones can override. |
+| **Operator** | Person in the 24/7 security control room who watches the console and acknowledges incidents. |
+| **Acknowledge / escalation** | An operator acknowledges an incident; risk ≥ 8 not acknowledged within 2 min escalates by SMS to the security supervisor. |
 | **Risk score** | 1–10 severity of an incident. Red ≥ 8, amber ≥ 5, else green. |
 | **Retention** | How long each kind of data is kept before the nightly job deletes it (ADR 0005). |
 
