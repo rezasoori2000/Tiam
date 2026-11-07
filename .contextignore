@@ -1,0 +1,55 @@
+# Dependency / package directories -- vendored code, not project source
+node_modules/
+**/node_modules/
+backend/venv/
+**/venv/
+**/.venv/
+**/site-packages/
+
+# Build output / compiled artifacts
+frontend/dist/
+**/dist/
+**/build/
+**/bin/
+**/obj/
+*.egg-info/
+
+# Python bytecode cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Model weights / large binary ML artifacts
+backend/*.pt
+backend/models/*.pt
+**/*.onnx
+**/*.pth
+**/*.weights
+
+# Runtime data, generated media & databases
+backend/data/*.mp4
+backend/data/*.db
+backend/data/event_snapshots/
+backend/output/
+**/*.log
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Version control & Claude Code local state
+.git/
+.claude/
+
+# Editor / OS clutter
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Lockfiles -- large and rarely useful to read in full
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

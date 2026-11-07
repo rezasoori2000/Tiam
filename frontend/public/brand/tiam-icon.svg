@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28">
+  <!-- Favicon can't read CSS tokens: #f59e0b = --accent, #0a0a0a = --bg -->
+  <circle cx="14" cy="14" r="11" fill="#0a0a0a" stroke="#f59e0b" stroke-width="3"/>
+  <circle cx="14" cy="14" r="4.5" fill="#f59e0b"/>
+  <circle cx="16" cy="12" r="1.5" fill="#0a0a0a"/>
+</svg>

@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Inter, self-hosted so the app renders its own text without an internet connection. */
+@font-face {
+  font-family: "Inter";
+  src: url("/brand/fonts/Inter-Variable.ttf") format("truetype-variations"),
+    url("/brand/fonts/Inter-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/brand/fonts/Inter-Italic-Variable.ttf") format("truetype-variations"),
+    url("/brand/fonts/Inter-Italic-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------- design tokens
+   The ONLY place colours are defined. tailwind.config.js and src/lib/theme.ts read these.
+   "Night Shift": low-glare dark control-room theme. To add a light theme, override the same
+   variables under :root[data-theme="light"] and set data-theme on <html>. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0a;          /* page background */
+  --panel: #141414;       /* cards, sidebar, top bar */
+  --panel-2: #1c1c1c;     /* inputs, inner cards, hover background, alert items */
+  --border: #2a2a2a;      /* 1px borders and dividers */
+  --text: #f2e9dc;        /* primary text (warm off-white) */
+  --text-muted: #9a8f80;  /* labels, timestamps, secondary text */
+  --accent: #f59e0b;      /* amber: primary buttons, active nav, focus, normal detection boxes */
+  --critical: #ff4d3d;    /* critical alerts, ALERT badges, alert camera outline */
+  --warning: #fbbf24;     /* medium alerts / needs review */
+  --success: #84cc16;     /* OK states */
+  --video-from: #1d1b18;  /* empty/loading video tile gradient start */
+  --video-to: #0f0e0c;    /* gradient end */
+  --radius: 4px;          /* sharp, compact corners */
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: theme("fontFamily.sans");
+  font-size: 13px;
+}
+
+/* Keyboard focus: 2px amber outline everywhere. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Thin scrollbars: --border thumb on a transparent track. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius); }
+
+@layer components {
+  .dm-card {
+    @apply rounded border border-line bg-panel;
+  }
+  .dm-input {
+    @apply w-full rounded border border-line bg-panel-2 px-3 py-2 text-sm text-fg transition-colors duration-150 placeholder:text-muted focus:border-accent focus:outline-none;
+  }
+  .dm-label {
+    @apply mb-1 block text-xs font-medium text-muted;
+  }
+  .dm-btn-primary {
+    @apply flex items-center gap-2 rounded bg-accent px-4 py-2 text-sm font-bold text-black transition duration-150 hover:brightness-110 disabled:opacity-50;
+  }
+  .dm-btn-secondary {
+    @apply flex items-center gap-2 rounded border border-line bg-panel-2 px-3 py-2 text-sm font-medium text-fg transition-colors duration-150 hover:border-accent hover:text-accent;
+  }
+  .dm-pill {
+    @apply inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs font-medium;
+  }
+  .dm-pill-emerald {
+    @apply dm-pill border-success/30 bg-success/10 text-success;
+  }
+  .dm-pill-amber {
+    @apply dm-pill border-warning/30 bg-warning/10 text-warning;
+  }
+  .dm-pill-red {
+    @apply dm-pill border-critical/30 bg-critical/10 text-critical;
+  }
+  .dm-pill-slate {
+    @apply dm-pill border-line bg-panel-2 text-muted;
+  }
+  /* Small solid chip on video (LIVE / ALERT). Black text: white on --critical is only ~3.3:1. */
+  .dm-chip-critical {
+    @apply rounded bg-critical px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black;
+  }
+  .dm-skeleton {
+    @apply animate-pulse rounded bg-panel-2;
+  }
+}
+
+@layer base {
+  /* Times, counters, plates: digits line up. */
+  body { font-variant-numeric: tabular-nums; }
+  button, a { @apply transition-colors duration-150; }
+  /* Native checkboxes/radios/sliders (e.g. Fisheye Setup) take the accent too. */
+  input, select, progress { accent-color: var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

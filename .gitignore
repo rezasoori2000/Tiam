@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+backend/venv/
+*.egg-info/
+
+# Downloaded/generated model weights (re-fetched via ultralytics auto-download
+# and backend/scripts/fetch_ppe_model.py -- not source, don't version)
+backend/*.pt
+backend/models/*.pt
+
+# Runtime data & generated artifacts
+backend/data/*.mp4
+backend/data/*.db
+backend/data/event_snapshots/
+backend/output/
+backend/uvicorn.log
+
+# Training datasets (Roboflow exports, forklift/tug images+labels) -- large,
+# reproducible from the dataset source, not source code
+backend/data/forklift/
+backend/data/forklift_tug*/
+backend/data/roboflow_downloads/
+# Roboflow export folders/zips, e.g. Tug.v1i.yolo26/ and Tug.v1i.yolo26.zip
+backend/data/*.v[0-9]*/
+backend/data/*.zip
+*.cache
+
+# YOLO training run outputs (weights/logs per run)
+backend/runs/
+
+# Additional downloaded model weights beyond backend/*.pt (e.g. CLIP)
+backend/weights/*.pt
+backend/weights/**/*.pt
+
+# Misc reference image dumps
+SecurityCamPic/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/vite.log
+*.local
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local session state
+.claude/
+*.log
+
+# Local working files (screenshots, generated reports, raw brand asset kits
+# such as the APL Brand Guide zip -- reference/source material, not app
+# code; anything actually needed by the app is copied into
+# frontend/public/brand/ and tracked there instead)
+/Documents/
+
+# Release builds (build-release.ps1) and the built SPA copied into a release
+/release/
+backend/static/
+deploy/config.ps1
+
+# Local dev runner state
+.dev-pids.json

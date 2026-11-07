@@ -1,0 +1,11 @@
+ultralytics
+supervision<0.31  # 0.31 removed sv.ByteTrack, which vision_engine uses
+opencv-python
+numpy
+huggingface_hub
+fastapi
+uvicorn[standard]
+azure-communication-email
+sqlalchemy
+pyodbc
+dateparser
