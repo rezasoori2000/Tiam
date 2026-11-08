@@ -19,6 +19,7 @@ import DetectionSettingsPage from "./pages/DetectionSettings";
 import ChangePassword from "./pages/ChangePassword";
 import SystemStatus from "./pages/SystemStatus";
 import SiteSettings from "./pages/SiteSettings";
+import AiVerification from "./pages/AiVerification";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -95,6 +96,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <DetectionSettingsPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/ai-verification"
+              element={
+                <RequireAdmin>
+                  <AiVerification />
                 </RequireAdmin>
               }
             />

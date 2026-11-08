@@ -8,6 +8,7 @@ import {
   Activity,
   BellRing,
   Building2,
+  Sparkles,
   ListChecks,
   LogOut,
   Ruler,
@@ -41,6 +42,7 @@ const ADMIN_ITEMS = [
   { to: "/admin/users", label: "User Management", icon: Users },
   { to: "/admin/roles", label: "Role Management", icon: ShieldCheck },
   { to: "/admin/detection-settings", label: "Detection Settings", icon: SlidersHorizontal },
+  { to: "/admin/ai-verification", label: "AI Verification", icon: Sparkles },
   { to: "/admin/site", label: "Site", icon: Building2 },
   { to: "/admin/system", label: "System", icon: Activity },
 ];

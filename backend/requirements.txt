@@ -14,3 +14,6 @@ av
 pyyaml
 nvidia-ml-py
 pytest
+anthropic
+openai
+google-genai

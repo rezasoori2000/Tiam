@@ -392,6 +392,15 @@ class EventOut(BaseModel):
     has_snapshot: bool
     event_type: Optional[str] = None
     has_clip: bool = False
+    vlm_status: str = "none"
+    vlm_verdict: Optional[str] = None
+    vlm_confidence: Optional[float] = None
+    vlm_reason: Optional[str] = None
+    vlm_observed: Optional[list] = None
+    vlm_model: Optional[str] = None
+    vlm_latency_ms: Optional[int] = None
+    vlm_error: Optional[str] = None
+    verified_at: Optional[datetime.datetime] = None
 
 
 class EventUpdate(BaseModel):
@@ -566,3 +575,65 @@ class SiteUpdate(BaseModel):
             except Exception:
                 raise ValueError(f"unknown timezone {v!r}")
         return v
+
+
+# ------------------------------------------------------------- AI verification
+
+VlmProvider = Literal["anthropic", "openai_compatible", "google"]
+VlmMode = Literal["off", "annotate", "gate"]
+
+
+class VlmSettingsOut(BaseModel):
+    """Never contains the API key: only whether one is stored and its last 4 characters."""
+    model_config = ConfigDict(from_attributes=True)
+    enabled: bool
+    provider: VlmProvider
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    api_key_set: bool = False
+    api_key_last4: Optional[str] = None
+    local_only: bool
+    timeout_s: float
+    max_concurrent: int
+    max_calls_per_hour: int
+    gate_timeout_s: float
+    min_confidence: float
+    rejected_retention_days: int
+    secret_key_configured: bool = False  # TIAM_SECRET_KEY present -> API keys can be stored
+
+
+class VlmSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    provider: Optional[VlmProvider] = None
+    base_url: Optional[str] = Field(default=None, max_length=500)
+    model: Optional[str] = Field(default=None, max_length=200)
+    # Write-only. Omitted or "" keeps the stored key; use DELETE /api/vlm/settings/api-key to remove it.
+    api_key: Optional[str] = Field(default=None, max_length=500)
+    local_only: Optional[bool] = None
+    timeout_s: Optional[float] = Field(default=None, ge=2, le=120)
+    max_concurrent: Optional[int] = Field(default=None, ge=1, le=16)
+    max_calls_per_hour: Optional[int] = Field(default=None, ge=1, le=10000)
+    gate_timeout_s: Optional[float] = Field(default=None, ge=2, le=60)
+    min_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    rejected_retention_days: Optional[int] = Field(default=None, ge=1, le=365)
+
+    @field_validator("base_url")
+    @classmethod
+    def _http_url(cls, v: Optional[str]) -> Optional[str]:
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("base_url must start with http:// or https://")
+        return v or None
+
+
+class VlmEventTypeOut(BaseModel):
+    event_type: str
+    label: str
+    mode: VlmMode
+    prompt_template: str
+    is_default_prompt: bool
+
+
+class VlmEventTypeUpdate(BaseModel):
+    event_type: str = Field(min_length=1, max_length=64)
+    mode: VlmMode
+    prompt_template: Optional[str] = Field(default=None, max_length=8000)  # null = reset to default

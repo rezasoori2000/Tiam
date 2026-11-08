@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,10 +27,14 @@ from .routers import (
     sites,
     system,
     users,
+    vlm as vlm_router,
     zone_types,
     zones,
 )
+from .vlm.service import service as vlm_service
 from .ws_manager import alerts_manager
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -112,7 +117,13 @@ _add_missing_columns(
 
 _add_missing_columns("calibrations", {"real_world_width_m": "FLOAT NULL"})
 _add_missing_columns("users", {"must_change_password": "BIT NOT NULL DEFAULT 0"})
-_add_missing_columns("events", {"event_type": "NVARCHAR(64) NULL", "has_clip": "BIT NOT NULL DEFAULT 0"})
+_add_missing_columns("events", {
+    "event_type": "NVARCHAR(64) NULL", "has_clip": "BIT NOT NULL DEFAULT 0",
+    "vlm_status": "NVARCHAR(16) NOT NULL DEFAULT 'none'", "vlm_verdict": "NVARCHAR(16) NULL",
+    "vlm_confidence": "FLOAT NULL", "vlm_reason": "NVARCHAR(MAX) NULL", "vlm_observed": "NVARCHAR(MAX) NULL",
+    "vlm_model": "NVARCHAR(100) NULL", "vlm_latency_ms": "INT NULL", "vlm_error": "NVARCHAR(MAX) NULL",
+    "verified_at": "DATETIME NULL",
+})
 
 with SessionLocal() as _db:
     crud.seed_default_zone_types(_db)
@@ -143,16 +154,32 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     alert_queue: asyncio.Queue = asyncio.Queue()
 
+    vlm_service.reload()  # AI verification settings, before any camera can raise an incident
+    vlm_service.fail_orphaned_pending()
     db = SessionLocal()
     camera_manager.start_all(loop, alert_queue, db)
     db.close()
 
     alert_task = asyncio.create_task(_pump_alerts(alert_queue))
+    purge_task = asyncio.create_task(_purge_rejected_loop())
     try:
         yield
     finally:
         alert_task.cancel()
+        purge_task.cancel()
         camera_manager.stop_all()
+
+
+async def _purge_rejected_loop() -> None:
+    """Hourly: delete AI-rejected incidents older than the retention setting (ADR 0005)."""
+    while True:
+        try:
+            removed = await asyncio.to_thread(vlm_service.purge_rejected)
+            if removed:
+                logger.info("Deleted %d AI-rejected incidents past retention", removed)
+        except Exception:  # pragma: no cover - keep the loop alive
+            logger.exception("Purging AI-rejected incidents failed")
+        await asyncio.sleep(3600)
 
 
 app = FastAPI(title="Security Camera Config API", lifespan=lifespan)
@@ -185,6 +212,7 @@ app.include_router(roles.router)
 app.include_router(detection_settings.router)
 app.include_router(sites.router, dependencies=_login_required)
 app.include_router(system.router)
+app.include_router(vlm_router.router)
 
 
 @app.get("/api/health")

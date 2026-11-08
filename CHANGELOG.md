@@ -8,6 +8,41 @@ got there and what's still unresolved. Newest first.
 
 ## 2026-11-08
 
+### Phase 2 – optional AI verification (spec F0, branch `retail-parking`)
+
+**Why:** cut false alarms (car prowling especially) without ever losing a real alert. User: must be
+optional, per alert type "AI first" or "straight to the dashboard", cloud or local model (Qwen).
+
+**What:** `app/vlm/` (base, prompts, keyframes, service, providers: Claude / OpenAI-compatible incl.
+local Qwen via Ollama/vLLM / Gemini), `PendingVerification` in `incident_pipeline.py`, `/api/vlm`,
+tables `vlm_settings`, `vlm_event_type_settings`, `vlm_usage`, `events.vlm_*` columns (all in
+`_add_missing_columns` / `create_all`), hourly purge of rejected incidents, startup cleanup of
+orphaned "pending", `GET /api/events?verdict=`, alert payload `vlm_status` + verification update
+messages. UI: AI Verification page (+ nav "AI Verification", Sparkles), VlmChip on Incidents cards and
+Live Monitor toasts (live-updated), AI reasoning block, AI-verdict filter. SDKs added: anthropic,
+openai, google-genai. `TIAM_SECRET_KEY` set as a Windows user env var on the dev laptop (approved).
+Details in CLAUDE.md "AI verification".
+
+**Bugs found while testing:** (1) parallel verdicts creating today's `vlm_usage` row hit a duplicate
+key, and because it shared the event's transaction the verdict was rolled back – event stuck
+"pending" (alert still went out). Fixed: separate transactions + lock + retry; regression test with 8
+parallel saves. (2) A restart mid-verification left "Verifying" forever – fixed at startup.
+
+**Verified:** pytest 47/47 (verdict parsing; gate confirmed/rejected/error/timeout+late update;
+annotate; frame collection; hourly cap; local-only; key frames; OpenAI-compatible provider against a
+fake local model server; the race). Live on throwaway DB `Tiam_VlmTest` (14/14): key returned only
+as last 4 and stored as ciphertext, Local only refuses cloud, local provider enabled, default modes,
+test connection, gated alert over `/ws/alerts` carries the verdict, key frames + prompt content,
+verdict stored, rejected stored/hidden/not alerted, usage counted. Chrome on `Tiam_UiTest`: settings
+page, local preset, Save & test ("Works: qwen3-vl:8b ... 0.2 s"), chips, AI reasoning, no console
+errors. All throwaway DBs dropped, test files deleted.
+
+**Not verified:** no real Claude / Gemini / Ollama call yet (the user tests "Save & test connection"
+with their own key; a real local Qwen needs a >= 16 GB GPU). The Anthropic request shape (fallbacks +
+output_config together) is checked against the installed SDK's signature only. The dev server on 8000
+was started before `TIAM_SECRET_KEY` existed: restart it once (new terminal) to store API keys.
+
+
 ### Car prowling rule (spec F1, branch `retail-parking`)
 
 **Why:** the top car-park threat (theft from vehicles, door-handle trying, catalytic converters).

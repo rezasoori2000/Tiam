@@ -468,8 +468,19 @@ def get_events(
     max_risk: Optional[int] = None,
     limit: int = 200,
     offset: int = 0,
+    verdict: Optional[str] = None,
 ) -> List[models.Event]:
+    """verdict: None = everything except AI-rejected; "all"; a verdict; "unverified" (error/skipped);
+    "none" (not sent to the AI)."""
     stmt = select(models.Event).order_by(models.Event.timestamp.desc())
+    if verdict is None:
+        stmt = stmt.where((models.Event.vlm_verdict.is_(None)) | (models.Event.vlm_verdict != "rejected"))
+    elif verdict == "unverified":
+        stmt = stmt.where(models.Event.vlm_status.in_(["error", "skipped"]))
+    elif verdict == "none":
+        stmt = stmt.where(models.Event.vlm_status == "none")
+    elif verdict != "all":
+        stmt = stmt.where(models.Event.vlm_verdict == verdict)
     if status is not None:
         stmt = stmt.where(models.Event.status == status)
     else:
@@ -551,6 +562,7 @@ def to_alert_payload(event: models.Event) -> dict:
         "policy_type": event.policy_type,
         "event_type": event.event_type,
         "risk_score": event.risk_score,
+        "vlm_status": event.vlm_status or "none",
         "timestamp": event.timestamp.isoformat(),
     }
 

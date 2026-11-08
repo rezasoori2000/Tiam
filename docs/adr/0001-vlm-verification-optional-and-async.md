@@ -16,6 +16,10 @@ unavailable, costs money per call, and sends images to a third party when cloud-
 - Providers behind one interface: `anthropic`, `openai_compatible` (OpenAI, Azure, local vLLM /
   Ollama / NIM), `google`. **Development and testing use Anthropic (Claude)**, because the dev RTX
   3050 can't host a VLM.
+- Implemented 2026-11-08: Claude default model `claude-sonnet-5-5` (user's choice), server-side
+  refusal fallback on; local default preset Ollama + `qwen3-vl:8b`. Per-type defaults: car_prowling
+  gate, exclusion/failed_to_stop annotate, speeding off; 120 calls/hour, 2 at once, gate 8 s,
+  min confidence 0.6, rejected kept 7 days.
 - API keys are encrypted at rest (Fernet, key from env var `TIAM_SECRET_KEY`, no fallback) and never
   returned by the API.
 

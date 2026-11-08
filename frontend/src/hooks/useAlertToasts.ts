@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { buildWsUrl } from "../lib/ws";
-import type { AlertPayload } from "../types";
+import type { AlertPayload, VerificationUpdate } from "../types";
 
 export interface Toast extends AlertPayload {
   toastId: string;
@@ -31,7 +31,14 @@ export function useAlertToasts() {
       if (cancelled) return;
       socket = new WebSocket(buildWsUrl("/ws/alerts"));
       socket.onmessage = (event) => {
-        const payload: AlertPayload = JSON.parse(event.data);
+        const message: AlertPayload | VerificationUpdate = JSON.parse(event.data);
+        if ("kind" in message && message.kind === "verification") {
+          // A late AI verdict: update the alert's toast if it's still on screen.
+          const { kind: _kind, ...update } = message;
+          setToasts((prev) => prev.map((t) => (t.event_id === message.event_id ? { ...t, ...update } : t)));
+          return;
+        }
+        const payload = message as AlertPayload;
         const toastId = `${payload.event_id}-${payload.timestamp}`;
         setToasts((prev) => [...prev, { ...payload, toastId }]);
         const timer = setTimeout(() => dismiss(toastId), TOAST_LIFETIME_MS);

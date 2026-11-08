@@ -161,7 +161,21 @@ export interface Event {
   has_snapshot: boolean;
   event_type: string | null; // machine type, e.g. "exclusion"; policy_type is the human label
   has_clip: boolean; // raw clip + box overlay (ADR 0008)
+  // AI verification (ADR 0001)
+  vlm_status: VlmStatus;
+  vlm_verdict: VlmVerdict | null;
+  vlm_confidence: number | null;
+  vlm_reason: string | null;
+  vlm_observed: string[] | null;
+  vlm_model: string | null;
+  vlm_latency_ms: number | null;
+  vlm_error: string | null;
+  verified_at: string | null;
 }
+
+// "none" = not sent to the AI; "unverified" only appears on live alerts (AI error, cap or timeout)
+export type VlmStatus = "none" | "pending" | "done" | "error" | "skipped" | "unverified";
+export type VlmVerdict = "confirmed" | "rejected" | "uncertain";
 
 // GET /api/events/{id}/clip-overlay: boxes per clip frame, in `width` x `height` pixels
 export interface ClipOverlay {
@@ -187,6 +201,20 @@ export interface AlertPayload {
   event_type: string | null;
   risk_score: number;
   timestamp: string;
+  vlm_status?: VlmStatus;
+  vlm_verdict?: VlmVerdict;
+  vlm_confidence?: number;
+  vlm_reason?: string;
+}
+
+// Sent on /ws/alerts when a verdict arrives after its alert (annotate mode, or gate timeout)
+export interface VerificationUpdate {
+  kind: "verification";
+  event_id: number;
+  vlm_status: VlmStatus;
+  vlm_verdict?: VlmVerdict;
+  vlm_confidence?: number;
+  vlm_reason?: string;
 }
 
 export interface HeatmapOption {
@@ -333,4 +361,45 @@ export interface SystemMetrics {
   disk_free_gb: number;
   disk_total_gb: number;
   verification_queue: number | null;
+}
+
+// ------------------------------------------------------------------ AI verification
+
+export type VlmProviderId = "anthropic" | "openai_compatible" | "google";
+export type VlmMode = "off" | "annotate" | "gate";
+
+export interface VlmSettings {
+  enabled: boolean;
+  provider: VlmProviderId;
+  base_url: string | null;
+  model: string | null;
+  api_key_set: boolean; // the key itself is never returned
+  api_key_last4: string | null;
+  local_only: boolean;
+  timeout_s: number;
+  max_concurrent: number;
+  max_calls_per_hour: number;
+  gate_timeout_s: number;
+  min_confidence: number;
+  rejected_retention_days: number;
+  secret_key_configured: boolean;
+}
+
+export interface VlmEventType {
+  event_type: string;
+  label: string;
+  mode: VlmMode;
+  prompt_template: string;
+  is_default_prompt: boolean;
+}
+
+export interface VlmUsageDay {
+  day: string;
+  calls: number;
+  errors: number;
+  skipped: number;
+  avg_latency_ms: number;
+  confirmed: number;
+  rejected: number;
+  uncertain: number;
 }

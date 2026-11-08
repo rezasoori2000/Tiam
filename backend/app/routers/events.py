@@ -29,11 +29,12 @@ def list_events(
     max_risk: Optional[int] = Query(None, ge=1, le=10),
     limit: int = 200,
     offset: int = 0,
+    verdict: Optional[str] = Query(None, pattern="^(all|confirmed|rejected|uncertain|unverified|none)$"),
     db: Session = Depends(get_db),
 ):
     return crud.get_events(
         db, status=status, camera_id=camera_id, min_risk=min_risk, max_risk=max_risk,
-        limit=limit, offset=offset,
+        limit=limit, offset=offset, verdict=verdict,
     )
 
 

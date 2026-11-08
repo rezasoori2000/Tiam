@@ -173,6 +173,7 @@ gate on `Depends(auth.require_admin)` at the router level.
 | `incidents.py` | `/api/incidents` | `GET /search?q=` — natural-language search ("speeding on Gate 2 last week", "over 20 km/h"): `incident_search.parse_query` extracts rule type, camera, dates and a min speed |
 | `detection_settings.py` | `/api/detection-settings` | admin: `GET ""`, `PUT ""` (restarts all workers), `GET /models` |
 | `sites.py` | `/api/sites` | `GET ""`; `PUT /{id}` (admin) |
+| `vlm.py` | `/api/vlm` | admin: `GET|PUT /settings` (key write-only), `DELETE /settings/api-key`, `GET|PUT /event-types` (mode + prompt), `GET /usage`, `POST /test` (built-in image, saved settings) |
 | `system.py` | `/api/system` | admin: `GET /metrics` (per-camera fps / ms per frame / incidents, GPU via pynvml, `data/retail_*` sizes, disk) |
 | `analytics.py` | `/api/analytics` | `GET /breaches-by-day`, `/risk-by-policy`, `/camera-leaderboard` |
 | `heatmap.py` | `/api/heatmap` | `GET /usage-options`, `/violation-options`, `/usage`, `/violations` (all return `{rows, cols, grid, max_count}`) |
@@ -295,6 +296,37 @@ Zones/calibration are loaded per-camera from the DB via `config_loader.load_zone
   `start-server.ps1` exports it.
 - **Replay harness** (`scripts/replay.py`): video + YAML (zones, ground truth) through the real
   `VisionEngine` + `_IncidentTracker` using video time; prints precision/recall per event type.
+
+### AI verification (phase 2, spec F0, ADR 0001)
+
+Optional, admin-controlled (`/admin/ai-verification`). Off = every alert goes straight to the
+dashboard, no AI code runs. On: per event type `off` / `annotate` (alert now, verdict added later as a
+`{"kind": "verification", event_id, vlm_*}` message on `/ws/alerts`) / `gate` (alert held until the
+verdict, max `gate_timeout_s` 8 s; `rejected` -> stored, NOT alerted, hidden from the default
+Incidents list and deleted after `rejected_retention_days` by an hourly task in `main.lifespan`;
+timeout / error / hourly cap -> alert goes out "unverified" – a real alert is never lost). Defaults:
+car_prowling gate, exclusion + failed_to_stop annotate, speeding off.
+- Flow: `IncidentPipeline._route` -> `PendingVerification` (collects ring frames until incident + 2 s,
+  `on_frame` from the camera thread) -> `vlm.service.VerificationService.submit` (thread pool of
+  `max_concurrent`, `max_calls_per_hour` sliding window) -> `keyframes.build` (up to 6 crops around the
+  incident tracks, ×2.5, 384-1024 px, + a 768 px full frame, boxes drawn with `#id`) -> provider ->
+  `_record` (event `vlm_*` columns, then `vlm_usage` in a separate, locked transaction – they used to
+  share one, and parallel verdicts hit a duplicate key that rolled the verdict back) -> callback
+  decides alert/update under a lock (gate timer vs verdict race). `fail_orphaned_pending()` at startup
+  turns verifications lost to a restart into `error`.
+- Providers (`app/vlm/`): `anthropic_provider` (Claude Messages API, default `claude-sonnet-5-5`,
+  structured JSON via `output_config.format`, effort low, `fallbacks: "default"` + beta
+  `server-side-fallback-2026-07-01`, refusal -> error), `openai_provider` (any OpenAI-compatible
+  server: **local Qwen3-VL via Ollama/vLLM/LM Studio**, or OpenAI; json_schema with json_object
+  fallback), `google_provider` (Gemini). Same verdict schema everywhere (`base.VERDICT_SCHEMA`,
+  `parse_verdict` clamps/validates). `confidence < min_confidence` -> uncertain.
+- Prompts (`vlm/prompts.py`): fixed system text (observable actions only – no emotion, intent,
+  health, age, gender, ethnicity; NZ Biometric Code) + per-type editable template with
+  `{site_type} {camera} {zone} {local_time} {event_type} {reason}` and listed false-alarm causes.
+- Settings: `vlm_settings` singleton (API key Fernet-encrypted via `secrets_store`, never returned –
+  `api_key_set` + last 4; "Local only" refuses non-LAN base URLs, `service.is_local_url`),
+  `vlm_event_type_settings`, `vlm_usage` (per day). Tests: `tests/test_vlm.py` (incl. a fake local
+  model server).
 
 ### Zone-only camera view
 
@@ -519,6 +551,7 @@ never grantable via `pages` — always admin-only.
 | `UsageHeatmap.tsx` | `/heatmap/usage` | Wraps shared `HeatmapView` for object-dwell heatmaps. |
 | `ViolationsHeatmap.tsx` | `/heatmap/violations` | Wraps shared `HeatmapView` for rule-violation location heatmaps. |
 | `Login.tsx` | `/login` | Auth form with the Tiam logo. |
+| `AiVerification.tsx` | `/admin/ai-verification` | Admin-only: enable AI verification, cloud/local provider (presets: Claude Sonnet 5.5, Ollama + Qwen3-VL 8B), key, Local only, limits, per-alert-type mode + prompt, usage. Incidents show `components/VlmChip.tsx` chips, an "AI reasoning" block, and an AI-verdict filter. |
 | `SystemStatus.tsx` | `/admin/system` | Admin-only: live worker fps / ms per frame / incidents, GPU, storage (polls every 3 s). |
 | `SiteSettings.tsx` | `/admin/site` | Admin-only: site name/type/timezone, after-hours window, max stay. |
 | `ChangePassword.tsx` | (none) | Shown by `RequireAuth` instead of the app while `user.must_change_password`. |

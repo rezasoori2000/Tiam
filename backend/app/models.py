@@ -168,6 +168,18 @@ class Event(Base):
     event_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Raw clip data/retail_event_clips/{id}.mp4 + box overlay {id}.json (ADR 0008).
     has_clip: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # AI verification (app/vlm, ADR 0001). vlm_status: none (not sent) | pending | done | error |
+    # skipped (budget cap); vlm_verdict: confirmed | rejected | uncertain. Rejected events are deleted
+    # after vlm_settings.rejected_retention_days.
+    vlm_status: Mapped[str] = mapped_column(String(16), default="none", nullable=False)
+    vlm_verdict: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    vlm_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vlm_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    vlm_observed: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    vlm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    vlm_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    vlm_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    verified_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Role(Base):
@@ -288,3 +300,49 @@ class Site(Base):
     # Optional per-weekday opening hours, e.g. {"mon": ["07:00", "21:00"], ...}; null = open 24/7.
     trading_hours: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     max_stay_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class VlmSettings(Base):
+    """AI verification settings (singleton row, id 1). The API key is stored encrypted only
+    (secrets_store, TIAM_SECRET_KEY) and never returned by the API."""
+    __tablename__ = "vlm_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), default="anthropic", nullable=False)  # anthropic|openai_compatible|google
+    base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    api_key_encrypted: Mapped[str | None] = mapped_column(String, nullable=True)
+    api_key_last4: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Refuse any provider whose base URL isn't on the local network (hospitals that keep video on site).
+    local_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    timeout_s: Mapped[float] = mapped_column(Float, default=20.0, nullable=False)
+    max_concurrent: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    max_calls_per_hour: Mapped[int] = mapped_column(Integer, default=120, nullable=False)
+    gate_timeout_s: Mapped[float] = mapped_column(Float, default=8.0, nullable=False)
+    min_confidence: Mapped[float] = mapped_column(Float, default=0.6, nullable=False)
+    rejected_retention_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+
+
+class VlmEventTypeSetting(Base):
+    """Per event type: off (straight to the dashboard) | annotate | gate, and an optional custom prompt."""
+    __tablename__ = "vlm_event_type_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    prompt_template: Mapped[str | None] = mapped_column(String, nullable=True)  # null = built-in default
+
+
+class VlmUsage(Base):
+    """One row per day: call counts and latency for the AI Verification usage panel."""
+    __tablename__ = "vlm_usage"
+
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    errors: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    confirmed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    rejected: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    uncertain: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

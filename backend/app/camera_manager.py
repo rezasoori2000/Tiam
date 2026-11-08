@@ -594,6 +594,7 @@ class _CameraWorker:
         # Clean frame + this frame's boxes into the clip ring (raw clips, ADR 0008).
         ring_item = self._ring.add(ts, resized, clips.boxes_from_tracks(engine.last_tracks))
         self._recorder.on_frame(ring_item)
+        self._pipeline.on_frame(ring_item)
 
         ok_enc, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
         stream_jpeg = jpeg.tobytes() if ok_enc else None
@@ -697,6 +698,7 @@ class _CameraWorker:
             self.last_error = self._redact_source(exc)
         finally:
             self._recorder.flush()
+            self._pipeline.flush()
             self._flush_heatmap(db)
             db.close()
 

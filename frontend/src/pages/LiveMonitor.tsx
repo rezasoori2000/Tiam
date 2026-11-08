@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useCameraStream } from "../hooks/useCameraStream";
 import { useAlertToasts } from "../hooks/useAlertToasts";
 import { riskLevel } from "./CoachingWorkbench";
+import VlmChip from "../components/VlmChip";
 import type { Camera, CameraStatus, CameraStatusResponse, Zone } from "../types";
 
 // Alert queue item: 4px left border by severity (same thresholds as riskLevel).
@@ -264,7 +265,10 @@ export default function LiveMonitor() {
               }`}
             />
             <div className="flex-1 text-sm">
-              <div className="font-semibold">{toast.policy_type}</div>
+              <div className="flex flex-wrap items-center gap-1.5 font-semibold">
+                {toast.policy_type}
+                <VlmChip status={toast.vlm_status} verdict={toast.vlm_verdict} confidence={toast.vlm_confidence} />
+              </div>
               <div className="text-xs text-muted">
                 {toast.zone_name} &middot; {riskLevel(toast.risk_score)} risk ({toast.risk_score}/10) &middot;{" "}
                 {new Date(toast.timestamp).toLocaleTimeString()}

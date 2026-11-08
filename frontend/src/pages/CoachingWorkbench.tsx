@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import EventClip from "../components/EventClip";
+import VlmChip from "../components/VlmChip";
 import type { Camera, Event, EventComment, EventStatus } from "../types";
 
 const TABS: { key: EventStatus | "all"; label: string }[] = [
@@ -194,9 +195,12 @@ function EventCard({
         <div className="text-xs text-slate-500">
           {camera?.name ?? `Camera ${event.camera_id}`} &middot; {event.zone_name}
         </div>
-        <div className="flex items-center justify-between pt-1">
-          <span className={STATUS_BADGE[event.status]}>{STATUS_TEXT[event.status]}</span>
-          <span className="flex items-center gap-1 text-xs text-slate-500">
+        <div className="flex items-center justify-between gap-1 pt-1">
+          <span className="flex flex-wrap items-center gap-1">
+            <span className={STATUS_BADGE[event.status]}>{STATUS_TEXT[event.status]}</span>
+            <VlmChip status={event.vlm_status} verdict={event.vlm_verdict} confidence={event.vlm_confidence} />
+          </span>
+          <span className="flex shrink-0 items-center gap-1 text-xs text-slate-500">
             <Clock className="h-3 w-3" /> {timeAgo(event.timestamp)}
           </span>
         </div>
@@ -501,6 +505,34 @@ export function EventDetail({
             ))}
           </div>
 
+          {event.vlm_status !== "none" && (
+            <div className="mt-4 rounded border border-line bg-panel-2 p-3 text-sm">
+              <div className="mb-1 flex items-center gap-2 text-xs text-muted">
+                AI reasoning
+                <VlmChip status={event.vlm_status} verdict={event.vlm_verdict} confidence={event.vlm_confidence} />
+              </div>
+              {event.vlm_status === "pending" && <p className="text-muted">Waiting for the AI's answer...</p>}
+              {(event.vlm_status === "error" || event.vlm_status === "skipped") && (
+                <p className="text-warning">Not verified: {event.vlm_error ?? "unknown error"}</p>
+              )}
+              {event.vlm_status === "done" && (
+                <>
+                  {event.vlm_observed && event.vlm_observed.length > 0 && (
+                    <ul className="mb-1 list-disc pl-5 text-fg">
+                      {event.vlm_observed.map((a, i) => (
+                        <li key={i}>{a}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {event.vlm_reason && <p className="text-fg">{event.vlm_reason}</p>}
+                  <p className="mt-1 text-xs text-muted">
+                    {event.vlm_model} · {event.vlm_latency_ms != null ? `${(event.vlm_latency_ms / 1000).toFixed(1)} s` : ""}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="mt-5 flex gap-2">
             {event.status !== "coached" && (
               <button onClick={() => onStatusChange(event.id, "coached")} className="dm-btn-primary !px-3 !py-1.5">
@@ -572,6 +604,8 @@ export default function CoachingWorkbench() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [tab, setTab] = useState<EventStatus | "all">("to_review");
   const [level, setLevel] = useState<RiskLevel | "all">("all");
+  // "" = everything except AI-rejected (the API default)
+  const [verdict, setVerdict] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   // Multi-select for bulk dismiss: Ctrl/Cmd+click toggles a card, Shift+click
@@ -583,12 +617,12 @@ export default function CoachingWorkbench() {
   const loadEvents = useCallback(() => {
     setLoading(true);
     const [min_risk, max_risk] = level === "all" ? [] : LEVEL_RANGE[level];
-    const params = { status: tab === "all" ? undefined : tab, min_risk, max_risk };
+    const params = { status: tab === "all" ? undefined : tab, min_risk, max_risk, verdict: verdict || undefined };
     api.get<Event[]>("/api/events", { params }).then((res) => {
       setEvents(res.data);
       setLoading(false);
     });
-  }, [tab, level]);
+  }, [tab, level, verdict]);
 
   useEffect(() => {
     api.get<Camera[]>("/api/cameras").then((res) => setCameras(res.data));
@@ -708,8 +742,22 @@ export default function CoachingWorkbench() {
           </button>
         ))}
         <select
-          aria-label="Filter by risk level"
+          aria-label="Filter by AI verdict"
           className="dm-input !my-1 !ml-auto !w-auto !px-2 !py-1 text-sm"
+          value={verdict}
+          onChange={(e) => setVerdict(e.target.value)}
+        >
+          <option value="">AI: hide rejected</option>
+          <option value="all">AI: all</option>
+          <option value="confirmed">AI: confirmed</option>
+          <option value="uncertain">AI: uncertain</option>
+          <option value="rejected">AI: rejected (false alarms)</option>
+          <option value="unverified">AI: not verified (error / cap)</option>
+          <option value="none">AI: not sent</option>
+        </select>
+        <select
+          aria-label="Filter by risk level"
+          className="dm-input !my-1 !w-auto !px-2 !py-1 text-sm"
           value={level}
           onChange={(e) => setLevel(e.target.value as RiskLevel | "all")}
         >
