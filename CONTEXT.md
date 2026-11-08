@@ -22,6 +22,9 @@ these terms are in `docs/adr/`. The full feature spec is `docs/spec/Tiam-CarPark
 | **Incident status** | Stored as `to_review` / `coached`; shown in the UI as **Open** / **Resolved**. |
 | **Verification** | Optional AI (VLM) check of an incident. Verdict: `confirmed`, `rejected`, `uncertain`, `skipped`, `error` (ADR 0001). |
 | **Gate mode / Annotate mode** | Gate: alert is held until the verdict (rejected → no alert). Annotate: alert at once, verdict added later. |
+| **Car prowling** | A person in a prowling zone going car to car, lingering or crouching beside parked cars. Zone rule `prowling` with a score threshold (default 3). |
+| **Parked vehicle** | A vehicle that stayed within 1 m of one spot for 30 s (it counts for prowling visits). |
+| **Visit** | A person standing within 1.2 m of a parked car for at least 3 s. |
 | **Plate read** | A licence plate read from video by Tiam's own ANPR pipeline (ADR 0002). Optional per camera. |
 | **Vehicle session** | One visit of one vehicle: entry → parked → exit. Keyed by plate when read, otherwise by vehicle signature. |
 | **Vehicle signature** | Plate (if read) + colour/type + visual embedding. |

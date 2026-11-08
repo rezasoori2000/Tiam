@@ -21,6 +21,8 @@ USAGE_METRICS = {
 VIOLATION_METRICS = {
     "exclusion": "Exclusion Zone Breach",
     "speeding": "Speed Limit Exceeded",
+    "failed_to_stop": "Failed to Stop",
+    "car_prowling": "Car Prowling",
 }
 
 

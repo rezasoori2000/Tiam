@@ -8,6 +8,40 @@ got there and what's still unresolved. Newest first.
 
 ## 2026-11-08
 
+### Car prowling rule (spec F1, branch `retail-parking`)
+
+**Why:** the top car-park threat (theft from vehicles, door-handle trying, catalytic converters).
+User asked for it as a zone rule, assignable to areas of each camera exactly like the others.
+
+**What:**
+- `app/analytics/car_prowling.py` – first analytics detector (logic in CLAUDE.md "Car prowling"):
+  parked-car timers, visits, score = distinct cars + long visits + crouches, alert at the zone's
+  threshold; person re-identification across track ids (found by the VisionEngine wiring test: a
+  person who moved/was hidden came back under a new id and the visit count reset).
+- Zone rule fields `rule_prowling` + `prowling_min_vehicles` on Zone / ZoneType (`default_` prefix),
+  in `_add_missing_columns`, schemas (threshold 1-20), `crud.create_zone`, `config_loader`,
+  `ZoneRules`. New system zone type **Car Prowling Watch** (also added to existing DBs).
+- Every camera worker and `replay.py` run `analytics.default_detectors()`; risk 8 "Car Prowling (N
+  vehicles checked)"; Incident Search keywords; Violations Heatmap option (+ the missing
+  "Failed to Stop").
+- UI: checkbox + "Alert at score" with help text on Zone Types and Zone Studio; incident detail
+  shows cars checked, score, and each visit (seconds, crouching).
+
+**Verified:** pytest 30/30 (9 prowling tests: car-to-car fires, own car + 60 s loading doesn't,
+crouching adds, moving cars aren't parked, outside zone / outside time window ignored, no prowling
+zone = no work, re-acquired car counted once, hidden person re-identified, distant new person not
+merged, plus one through the full VisionEngine with a fake detector). API on throwaway DB
+`Tiam_ProwlTest` (9/9: seeded type, inherit/override threshold, validation, engine loads rule,
+heatmap option, risk, search). Dev DB `RetailParkingMonitor` migrated and got the new zone type by
+itself. Chrome (throwaway `Tiam_UiTest`): Zone Types checkbox + threshold, Zone Studio pre-fills
+from the type; no console errors.
+
+**Not verified / open:** no real or staged prowling footage – thresholds (1.2 m, 3 s, 30 s parked,
+crouch 60%) are from the spec, not tuned on site video. Crouching is a box-height heuristic until
+the pose model (phase 3). No "visited cars" trail drawn on the snapshot yet. Distances are rough on
+an uncalibrated camera.
+
+
 ### Phase 1 – platform foundations (car-park spec section 14)
 
 **Why:** everything in phases 2-8 (AI verification, prowling, loitering, ANPR...) plugs into these.

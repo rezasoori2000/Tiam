@@ -212,6 +212,18 @@ function rawPayloadDetails(event: Event): { label: string; value: string }[] {
   if (p.limit_kmh != null) details.push({ label: "Speed limit", value: `${p.limit_kmh} km/h` });
   if (p.distance_m != null) details.push({ label: "Distance", value: `${p.distance_m.toFixed(1)} m` });
   if (p.min_distance_m != null) details.push({ label: "Required min distance", value: `${p.min_distance_m} m` });
+  if (p.vehicles_visited != null) {
+    details.push({ label: "Cars checked", value: String(p.vehicles_visited) });
+    details.push({ label: "Prowling score", value: `${p.score} (alert at ${p.threshold})` });
+    if (Array.isArray(p.visits) && p.visits.length) {
+      details.push({
+        label: "Visits",
+        value: p.visits
+          .map((v: any) => `car #${v.vehicle_track_id} ${v.seconds}s${v.crouch_seconds >= 2 ? ` (crouched ${v.crouch_seconds}s)` : ""}`)
+          .join(" · "),
+      });
+    }
+  }
   if (event.track_id != null) details.push({ label: "Track ID", value: String(event.track_id) });
   return details;
 }

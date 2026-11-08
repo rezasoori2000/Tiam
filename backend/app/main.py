@@ -83,6 +83,8 @@ _add_missing_columns(
         "default_to_time": "NVARCHAR(5) NULL",
         "rule_stop_required": "BIT NOT NULL DEFAULT 0",
         "default_stop_min_seconds": "FLOAT NOT NULL DEFAULT 1.0",
+        "rule_prowling": "BIT NOT NULL DEFAULT 0",
+        "default_prowling_min_vehicles": "FLOAT NOT NULL DEFAULT 3.0",
     },
 )
 _add_missing_columns(
@@ -93,6 +95,8 @@ _add_missing_columns(
         "to_time": "NVARCHAR(5) NULL",
         "rule_stop_required": "BIT NOT NULL DEFAULT 0",
         "stop_min_seconds": "FLOAT NOT NULL DEFAULT 1.0",
+        "rule_prowling": "BIT NOT NULL DEFAULT 0",
+        "prowling_min_vehicles": "FLOAT NOT NULL DEFAULT 3.0",
     },
 )
 _add_missing_columns(

@@ -59,6 +59,7 @@ def run(scenario_path: Path, realtime: bool = False, min_obs: int = 3, window: i
     import cv2
     import yaml
 
+    from app.analytics import default_detectors
     from app.camera_manager import _IncidentTracker
     from app.config import CalibrationConfig, EngineConfig, Zone, ZoneRules
     from app.vision_engine import VisionEngine
@@ -70,7 +71,7 @@ def run(scenario_path: Path, realtime: bool = False, min_obs: int = 3, window: i
     ]
     engine = VisionEngine(EngineConfig(
         zones=zones, calibration=CalibrationConfig(**sc.get("calibration", {})), frame_size=FRAME_SIZE,
-    ))
+    ), detectors=default_detectors())
     tracker = _IncidentTracker(min_observations=min_obs, window_frames=window)
     cap = cv2.VideoCapture(str(scenario_path.parent / sc["video"]))
     if not cap.isOpened():

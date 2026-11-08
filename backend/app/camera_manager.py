@@ -26,6 +26,7 @@ import cv2
 import numpy as np
 
 from . import clips, crud, fisheye, heatmap
+from .analytics import default_detectors
 from .config import CalibrationConfig, EngineConfig
 from .incident_pipeline import AlertDispatcher, IncidentPipeline
 from .database import SessionLocal
@@ -527,7 +528,7 @@ class _CameraWorker:
             detector_imgsz=settings.detector_imgsz,
             ignore_person_shadows=settings.ignore_person_shadows,
         )
-        engine = VisionEngine(config)
+        engine = VisionEngine(config, detectors=default_detectors())
         engine.refresh_from_db(db)
         return engine
 

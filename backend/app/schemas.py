@@ -115,6 +115,8 @@ class ZoneTypeBase(BaseModel):
     default_max_speed_kmh: Optional[float] = None
     rule_stop_required: bool = False
     default_stop_min_seconds: float = 1.0
+    rule_prowling: bool = False
+    default_prowling_min_vehicles: float = Field(default=3.0, ge=1, le=20)
     time_restriction_enabled: bool = False
     default_from_time: Optional[str] = None
     default_to_time: Optional[str] = None
@@ -132,6 +134,8 @@ class ZoneTypeUpdate(BaseModel):
     default_max_speed_kmh: Optional[float] = None
     rule_stop_required: Optional[bool] = None
     default_stop_min_seconds: Optional[float] = None
+    rule_prowling: Optional[bool] = None
+    default_prowling_min_vehicles: Optional[float] = Field(default=None, ge=1, le=20)
     time_restriction_enabled: Optional[bool] = None
     default_from_time: Optional[str] = None
     default_to_time: Optional[str] = None
@@ -153,6 +157,8 @@ class ZoneBase(BaseModel):
     rule_exclusion: bool = False
     rule_stop_required: bool = False
     stop_min_seconds: float = 1.0
+    rule_prowling: bool = False
+    prowling_min_vehicles: float = Field(default=3.0, ge=1, le=20)
     time_restriction_enabled: bool = False
     from_time: Optional[str] = None
     to_time: Optional[str] = None
@@ -177,6 +183,8 @@ class ZoneCreate(BaseModel):
     rule_exclusion: Optional[bool] = None
     rule_stop_required: Optional[bool] = None
     stop_min_seconds: Optional[float] = None
+    rule_prowling: Optional[bool] = None
+    prowling_min_vehicles: Optional[float] = Field(default=None, ge=1, le=20)
     time_restriction_enabled: Optional[bool] = None
     from_time: Optional[str] = None
     to_time: Optional[str] = None
@@ -197,6 +205,8 @@ class ZoneUpdate(BaseModel):
     rule_exclusion: Optional[bool] = None
     rule_stop_required: Optional[bool] = None
     stop_min_seconds: Optional[float] = None
+    rule_prowling: Optional[bool] = None
+    prowling_min_vehicles: Optional[float] = Field(default=None, ge=1, le=20)
     time_restriction_enabled: Optional[bool] = None
     from_time: Optional[str] = None
     to_time: Optional[str] = None

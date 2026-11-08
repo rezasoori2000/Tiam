@@ -53,3 +53,11 @@ class Detector(Protocol):
     def update(self, ctx: FrameContext) -> List[CandidateEvent]: ...
 
     def prune(self, live_track_ids: set) -> None: ...
+
+
+def default_detectors() -> List["Detector"]:
+    """Fresh detector instances for one camera (each keeps its own per-track state). Detectors
+    check their own zone rules, so with no matching zones they cost almost nothing."""
+    from .car_prowling import CarProwlingDetector
+
+    return [CarProwlingDetector()]

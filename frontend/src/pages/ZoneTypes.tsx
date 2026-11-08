@@ -17,6 +17,8 @@ interface FormState {
   default_max_speed_kmh: string;
   rule_stop_required: boolean;
   default_stop_min_seconds: string;
+  rule_prowling: boolean;
+  default_prowling_min_vehicles: string;
   time_restriction_enabled: boolean;
   default_from_time: string;
   default_to_time: string;
@@ -30,6 +32,8 @@ const INITIAL_FORM: FormState = {
   default_max_speed_kmh: "",
   rule_stop_required: false,
   default_stop_min_seconds: "1",
+  rule_prowling: false,
+  default_prowling_min_vehicles: "3",
   time_restriction_enabled: false,
   default_from_time: "",
   default_to_time: "",
@@ -44,6 +48,8 @@ function toFormState(zt: ZoneType): FormState {
     default_max_speed_kmh: zt.default_max_speed_kmh != null ? String(zt.default_max_speed_kmh) : "",
     rule_stop_required: zt.rule_stop_required,
     default_stop_min_seconds: String(zt.default_stop_min_seconds),
+    rule_prowling: zt.rule_prowling,
+    default_prowling_min_vehicles: String(zt.default_prowling_min_vehicles),
     time_restriction_enabled: zt.time_restriction_enabled,
     default_from_time: zt.default_from_time ?? "",
     default_to_time: zt.default_to_time ?? "",
@@ -59,6 +65,8 @@ function toPayload(form: FormState): ZoneTypeCreatePayload {
     default_max_speed_kmh: form.default_max_speed_kmh ? Number(form.default_max_speed_kmh) : null,
     rule_stop_required: form.rule_stop_required,
     default_stop_min_seconds: Number(form.default_stop_min_seconds) || 1,
+    rule_prowling: form.rule_prowling,
+    default_prowling_min_vehicles: Number(form.default_prowling_min_vehicles) || 3,
     time_restriction_enabled: form.time_restriction_enabled,
     default_from_time: form.time_restriction_enabled ? form.default_from_time || null : null,
     default_to_time: form.time_restriction_enabled ? form.default_to_time || null : null,
@@ -70,6 +78,7 @@ function summarizeRules(zt: ZoneType): string {
   if (zt.rule_exclusion) parts.push(`${APPLIES_TO_LABEL[zt.applies_to]} exclusion`);
   if (zt.default_max_speed_kmh != null) parts.push(`Speed limit ${zt.default_max_speed_kmh}km/h`);
   if (zt.rule_stop_required) parts.push(`Must stop ≥ ${zt.default_stop_min_seconds}s`);
+  if (zt.rule_prowling) parts.push(`Car prowling (alert at ${zt.default_prowling_min_vehicles})`);
   if (zt.time_restriction_enabled && zt.default_from_time && zt.default_to_time) {
     parts.push(`Active ${zt.default_from_time}-${zt.default_to_time}`);
   }
@@ -149,6 +158,31 @@ function ZoneTypeFields({
             }
             className="dm-input"
           />
+        </label>
+      )}
+
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={form.rule_prowling}
+          onChange={(e) => setForm((f) => ({ ...f, rule_prowling: e.target.checked }))}
+          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-apl-sunset"
+        />
+        Car prowling (person going car to car)
+      </label>
+      {form.rule_prowling && (
+        <label className="text-sm">
+          <span className="dm-label">Alert at score (cars checked)</span>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            step="0.5"
+            value={form.default_prowling_min_vehicles}
+            onChange={(e) => setForm((f) => ({ ...f, default_prowling_min_vehicles: e.target.value }))}
+            className="dm-input"
+          />
+          <span className="mt-1 block text-xs text-muted">Alerts when a person here checks several parked cars, lingers 10 s+ beside one (+0.5) or crouches beside one (+1). Each different car = 1 point. Needs the camera calibrated.</span>
         </label>
       )}
 

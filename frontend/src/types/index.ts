@@ -83,6 +83,8 @@ export interface ZoneTypeRules {
   default_max_speed_kmh: number | null;
   rule_stop_required: boolean;
   default_stop_min_seconds: number;
+  rule_prowling: boolean;
+  default_prowling_min_vehicles: number; // score needed to alert, see analytics/car_prowling.py
   time_restriction_enabled: boolean;
   default_from_time: string | null;
   default_to_time: string | null;
@@ -106,6 +108,8 @@ export interface ZoneRulesInput {
   max_speed_kmh: number | null;
   rule_stop_required: boolean;
   stop_min_seconds: number;
+  rule_prowling: boolean;
+  prowling_min_vehicles: number;
   time_restriction_enabled: boolean;
   from_time: string | null;
   to_time: string | null;

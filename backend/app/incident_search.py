@@ -23,6 +23,10 @@ RULE_TYPE_PREFIXES: dict[str, tuple[str, list[str]]] = {
     "speeding": ("Speed Limit Exceeded", [
         "speeding", "speed", "too fast", "overspeed", "over the limit",
     ]),
+    "car_prowling": ("Car Prowling", [
+        "prowling", "prowler", "car to car", "checking cars", "door handle", "break-in", "break in",
+        "theft from car", "suspicious person",
+    ]),
     "failed_to_stop": ("Failed to Stop", [
         "stop sign", "failed to stop", "didn't stop", "did not stop", "no stop", "rolling stop",
     ]),

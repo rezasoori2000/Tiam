@@ -151,9 +151,21 @@ def delete_zone_type(db: Session, zone_type: models.ZoneType) -> None:
     db.commit()
 
 
+_PROWLING_TYPE = dict(
+    name="Car Prowling Watch",
+    description="Parking bays: alert when someone goes car to car, lingers or crouches beside parked cars",
+    applies_to="person", rule_prowling=True, default_prowling_min_vehicles=3.0,
+)
+
+
 def seed_default_zone_types(db: Session) -> None:
     existing = get_zone_types(db)
     if existing:
+        # Built-in types added in a later release still reach existing databases (matched by
+        # rule, not name, since admins can rename them).
+        if not any(zt.rule_prowling for zt in existing):
+            db.add(models.ZoneType(**_PROWLING_TYPE, is_system=True))
+            db.commit()
         return
     defaults = [
         dict(name="Pedestrian Exclusion", description="No pedestrian entry allowed",
@@ -166,6 +178,7 @@ def seed_default_zone_types(db: Session) -> None:
              applies_to="vehicle", default_max_speed_kmh=15.0),
         dict(name="Vehicle Stop Required", description="Vehicles must come to a stop before continuing",
              applies_to="vehicle", rule_stop_required=True, default_stop_min_seconds=1.0),
+        _PROWLING_TYPE,
     ]
     for d in defaults:
         db.add(models.ZoneType(**d, is_system=True))
@@ -192,6 +205,8 @@ def create_zone(db: Session, zone_in: schemas.ZoneCreate) -> models.Zone:
         "max_speed_kmh": data.get("max_speed_kmh", zone_type.default_max_speed_kmh),
         "rule_stop_required": data.get("rule_stop_required", zone_type.rule_stop_required),
         "stop_min_seconds": data.get("stop_min_seconds", zone_type.default_stop_min_seconds),
+        "rule_prowling": data.get("rule_prowling", zone_type.rule_prowling),
+        "prowling_min_vehicles": data.get("prowling_min_vehicles", zone_type.default_prowling_min_vehicles),
         "time_restriction_enabled": data.get(
             "time_restriction_enabled", zone_type.time_restriction_enabled
         ),

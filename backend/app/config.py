@@ -18,6 +18,10 @@ class ZoneRules:
     # tolerance for box jitter, not a policy choice, so not per zone).
     stop_required: bool = False
     stop_min_seconds: float = 1.0
+    # car prowling (analytics/car_prowling.py): people in this zone going car to car / lingering /
+    # crouching beside parked vehicles; alert once the score reaches prowling_min_vehicles.
+    prowling: bool = False
+    prowling_min_vehicles: float = 3.0
     # object classes this zone's rules apply to, matched against detector class names
     applies_to: List[str] = field(default_factory=lambda: ["person"])
     # optional time-of-day window ("HH:MM") these rules are enforced in; a

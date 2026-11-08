@@ -88,6 +88,9 @@ class ZoneType(Base):
     # stop-sign-style compliance: see Zone.rule_stop_required below.
     rule_stop_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     default_stop_min_seconds: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    # car prowling: see Zone.rule_prowling below.
+    rule_prowling: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    default_prowling_min_vehicles: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     # optional time-of-day window ("HH:MM") the rule applies in; when
     # time_restriction_enabled is False the rule applies at all times.
     time_restriction_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -118,6 +121,10 @@ class Zone(Base):
     # "failed_to_stop" incident fires when it leaves without having done so.
     rule_stop_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     stop_min_seconds: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    # Car prowling (app/analytics/car_prowling.py): a person in this zone who visits parked cars,
+    # lingers or crouches beside them scores points; alert at prowling_min_vehicles.
+    rule_prowling: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    prowling_min_vehicles: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     # optional time-of-day window ("HH:MM") the rules above apply in; when
     # time_restriction_enabled is False the rules apply at all times.
     time_restriction_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

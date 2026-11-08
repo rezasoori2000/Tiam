@@ -115,14 +115,16 @@ gate on `Depends(auth.require_admin)` at the router level.
   One server per site (ADR 0004): one default row is seeded (`crud.seed_default_site`).
 - **ZoneType** (`zone_types`) — reusable rule presets. `id, name, description?, applies_to("person"|
   "vehicle"|"both", default "person"), rule_exclusion(bool), default_max_speed_kmh?,
-  rule_stop_required(bool), default_stop_min_seconds(default 1.0), time_restriction_enabled(bool),
+  rule_stop_required(bool), default_stop_min_seconds(default 1.0), rule_prowling(bool),
+  default_prowling_min_vehicles(default 3.0), time_restriction_enabled(bool),
   default_from_time?("HH:MM"), default_to_time?("HH:MM"), is_system(bool)` (seeded types are
   non-deletable). Seeded: Pedestrian Exclusion, Vehicle Exclusion, Vehicle Speed Limit 10/15 km/h,
-  Vehicle Stop Required.
+  Vehicle Stop Required, Car Prowling Watch (also added to existing DBs by `seed_default_zone_types`).
 - **Zone** (`zones`) — per-camera drawn zone. `id, camera_id`→cameras (CASCADE), `zone_type_id`→
   zone_types (SET NULL, optional), `name, polygon_points`(JSON `[[x,y],...]`), plus the same rule
   fields as ZoneType minus the "default_" prefix (`applies_to, max_speed_kmh, rule_exclusion,
-  rule_stop_required, stop_min_seconds, time_restriction_enabled, from_time?, to_time?`).
+  rule_stop_required, stop_min_seconds, rule_prowling, prowling_min_vehicles,
+  time_restriction_enabled, from_time?, to_time?`).
 - **Calibration** (`calibrations`) — `id, camera_id`→cameras (CASCADE), `name, line_points`(JSON,
   2 points = reference line, or 4 = ground-rectangle corners in order, convexity validated in
   `schemas`), `real_world_meters(default 1.0)` (line length / rectangle side 1→2),
@@ -234,7 +236,9 @@ by the tracker after an occlusion; ByteTrack's `lost_track_buffer` is also raise
 4. Classes used: COCO `person`, plus configured `vehicle_class_names = ["car","truck","bus",
    "motorcycle"]`; anything else is `kind="other"` and dropped.
 5. Zone rules (`ZoneRules` in `app/config.py`): `exclusion, speed_limit_kmh, stop_required,
-   stop_min_seconds, applies_to, time_restriction_enabled, from_time?, to_time?`. `ZoneRules.is_active_at(ts)` checks whether "now" falls in
+   stop_min_seconds, prowling, prowling_min_vehicles, applies_to, time_restriction_enabled,
+   from_time?, to_time?`. `prowling` is evaluated by the car-prowling detector (see "Incident
+   pipeline, clips, detectors"), the rest by `_apply_rules`. `ZoneRules.is_active_at(ts)` checks whether "now" falls in
    `[from_time, to_time]` (HH:MM local time), supporting overnight wraparound (e.g. 22:00→06:00 when
    `from > to`). `_apply_rules` checks this before evaluating any rule — a time-windowed rule outside its window is fully skipped (no alert, no
    event), whichever type of rule it is.
@@ -265,6 +269,16 @@ Zones/calibration are loaded per-camera from the DB via `config_loader.load_zone
   `update(FrameContext) -> [candidate event]`, `prune(live_track_ids)`). `VisionEngine(config,
   detectors=[...])` runs them after the built-in zone rules (`_run_detectors`); `key_track_ids` in an
   event marks those tracks as threats (red boxes). No network, no heavy models inside `update`.
+  `analytics.default_detectors()` is what every camera worker and `replay.py` get.
+- **Car prowling** (`app/analytics/car_prowling.py`, spec F1, zone rule `prowling`): for people in
+  such a zone (applies_to must include person; time window respected): a vehicle is *parked* after
+  30 s within 1 m of one spot; a *visit* = within 1.2 m of a parked car's footprint (bottom 40% of its
+  box) for >= 3 s; score over the last 5 min = distinct cars (merged within 2 m) + 0.5 per 10 s+ visit
+  + 1 per crouched visit (box height < 60% of the person's 10 s max, >= 2 s – stand-in until a pose
+  model). While score >= `prowling_min_vehicles` it emits `car_prowling` every frame (dedupe makes
+  one incident; risk 8; payload: vehicles_visited, visits, score, threshold). A new person track
+  appearing within 2 m + 2 m/s × gap (<= 30 s) of a lost one inherits its visits (prowlers get lost
+  behind cars). Needs calibration for metres. Tests: `tests/test_car_prowling.py`.
 - **Incident pipeline** (`app/incident_pipeline.py`): after `_IncidentTracker` confirms an incident,
   `IncidentPipeline.handle_frame` persists it (`crud.create_event`, sets `event_type`), writes the
   snapshot, starts the clip and calls `_route` → `AlertDispatcher.dispatch` (today: `/ws/alerts`).
@@ -385,8 +399,9 @@ saves an edited circle first (`PUT /api/cameras/{id}`), then the views.
 ### Alerting
 
 `_apply_rules(tracks, ts)` returns raw event dicts (`type: exclusion|speeding|failed_to_stop`
-+ type-specific fields). `risk.score_event()` converts this to a human `policy_type` string + a
-1-10 `risk_score` (exclusion=7, failed_to_stop=6, speeding scaled by how far over the limit). `crud.create_event` persists it; camera_manager builds an alert payload
++ type-specific fields); detectors add `car_prowling`. `risk.score_event()` converts these to a human
+`policy_type` string + a 1-10 `risk_score` (exclusion=7, failed_to_stop=6, car_prowling=8,
+speeding scaled by how far over the limit). `crud.create_event` persists it; camera_manager builds an alert payload
 (`crud.to_alert_payload`) and pushes it onto the shared queue; `main.py`'s `_pump_alerts` task
 broadcasts it live to every `/ws/alerts` client. **There is no automatic email/webhook
 notification** — email (`app/email_service.py`, Azure Communication Services) is only sent
