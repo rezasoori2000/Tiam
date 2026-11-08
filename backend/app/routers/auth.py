@@ -32,6 +32,7 @@ def change_password(
     user.password_hash, user.password_salt = auth.hash_password(body.new_password)
     user.must_change_password = False
     db.commit()
+    crud.INITIAL_ADMIN_PASSWORD_FILE.unlink(missing_ok=True)  # one-time password no longer valid
 
 
 @router.post("/logout", status_code=204)

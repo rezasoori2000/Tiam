@@ -8,11 +8,14 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 import logging
+from pathlib import Path
 import secrets
 
 from . import auth, heatmap as heatmap_grid, models, risk, schemas
 
 logger = logging.getLogger(__name__)
+
+INITIAL_ADMIN_PASSWORD_FILE = Path(__file__).resolve().parent.parent / "data" / "initial_admin_password.txt"
 
 
 # ----------------------------------------------------------------- cameras
@@ -430,8 +433,19 @@ def seed_default_admin(db: Session) -> None:
             )
         )
         db.commit()
-        logger.warning("Created user 'admin' with one-time password: %s (must be changed at first login)", initial_password)
-        print(f"*** Tiam: created user 'admin' with one-time password: {initial_password} ***", flush=True)
+        # Also in a local file: a console line is easy to miss (and buried in server.log on a site
+        # server). backend/data is git-ignored; the file is deleted when the password is changed.
+        INITIAL_ADMIN_PASSWORD_FILE.parent.mkdir(parents=True, exist_ok=True)
+        INITIAL_ADMIN_PASSWORD_FILE.write_text(
+            "Tiam one-time admin login\n"
+            "username: admin\n"
+            f"password: {initial_password}\n"
+            "You must choose a new password at first login; this file is then deleted.\n",
+            encoding="utf-8",
+        )
+        logger.warning("Created user 'admin' with one-time password: %s (also in %s)", initial_password, INITIAL_ADMIN_PASSWORD_FILE)
+        print(f"*** Tiam: created user 'admin' with one-time password: {initial_password} "
+              f"(also in {INITIAL_ADMIN_PASSWORD_FILE}) ***", flush=True)
 
 
 # ------------------------------------------------------------------ events

@@ -496,8 +496,9 @@ Fixed on this branch (2026-11-08, ADR 0006; `main` still has both issues):
   `AzureCommunicationServiceConnectionString` / `AzureCommunicationServicesSenderEmail`; unset =
   email disabled with a clear error. The key that used to be hard-coded is still in the factory
   repo's history and must be rotated in the Azure portal.
-- `crud.seed_default_admin` creates `admin` with a **random one-time password**, printed once to the
-  server console/log, and `User.must_change_password = True`. Never put a password in source.
+- `crud.seed_default_admin` creates `admin` with a **random one-time password**, printed to the
+  server console/log and written to `backend/data/initial_admin_password.txt` (git-ignored; deleted
+  by `POST /api/auth/change-password`), and `User.must_change_password = True`. Never put a password in source.
 
 ---
 
