@@ -1,5 +1,6 @@
 """Fight detector on synthetic keypoints. Calibration 0.02 m/px: 1.5 m close = 75 px. Person boxes
 are 110 px tall, so the 1.8 body-heights/s limb threshold is ~200 px/s."""
+import json
 from pathlib import Path
 
 import numpy as np
@@ -63,6 +64,15 @@ def test_sustained_strikes_fire_after_min_seconds():
     assert first["type"] == "fight" and first["subtype"] == "strikes"
     assert first["key_track_ids"] == [1, 2] and first["track_id"] == 1
     assert first["timestamp"] >= 2.0
+
+
+def test_event_is_json_serialisable_with_float32_boxes():
+    """Real tracker boxes are float32; the payload goes into a JSON column (this crashed live)."""
+    frames = [(ts, [TrackView(**{**vars(t), "xyxy": t.xyxy.astype(np.float32)}) for t in tracks])
+              for ts, tracks in scuffle(3.0)]
+    events = run(FightDetector(), frames, [zone()])
+    assert events
+    json.dumps(events)
 
 
 def test_short_burst_does_not_fire():

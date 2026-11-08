@@ -8,6 +8,20 @@ got there and what's still unresolved. Newest first.
 
 ## 2026-11-08
 
+### Fight detection fixed on a real clip (user's test video)
+
+**Why:** the user's fight video (portrait YouTube Short of CCTV, 704x1182) raised nothing.
+**Found & fixed:** (1) file frames were stretched to 960x540 – people squashed 3x, YOLO found none:
+file sources are now letterboxed to 16:9 (`camera_manager.letterbox`, replay too; real cameras
+unchanged so their zones stay put); (2) distances via the (absent) calibration / feet-to-feet put two
+fighters 2-3.5 "m" apart: now box gap in body heights; (3) limb speed thresholds too high for real
+punches at low fps: 1.2 body heights/s, samples up to 1.2 s apart; (4) at the live ~6 fps, pose every
+2nd frame missed it: now every frame (only while two people are close in a fight zone); (5) **crash**:
+float32 in the payload broke the event INSERT (JSON) and put the camera in error – fixed + test.
+**Verified:** offline the clip fires only during the fight (2.9-5.4 s), nothing in the calm part;
+live on the user's server: incident "Fight / Assault (strikes)", AI gate confirmed (4.5 s); pytest
+58/58. Tuned on one clip only – collect more (incl. hugs, greetings, play) and run replay.py.
+
 ### Fight / assault detection (spec F4, video only)
 
 **Why:** user: fights and assaults from video, as a zone rule like the others (per camera, per area,

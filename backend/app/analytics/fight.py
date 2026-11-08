@@ -11,7 +11,8 @@ Any of these emits `fight` every frame while it holds (dedupe -> one incident). 
 children and people running for a bus can look similar: by default fights go to the AI gate.
 
 The pose model only runs when asked (`pose_requests`): persons in a fight zone within PAIR_MAX_M of
-another person. Speeds need the camera calibrated for metres; limb speed doesn't (body heights).
+another person. Distances and speeds are measured in body heights (box height = PERSON_HEIGHT_M), not
+via the camera calibration: it works uncalibrated, in close-ups, and anywhere in a perspective view.
 """
 from collections import deque
 from dataclasses import dataclass, field
@@ -22,10 +23,13 @@ import numpy as np
 from . import CandidateEvent, FrameContext, TrackView
 from .pose import L_ANKLE, L_WRIST, R_ANKLE, R_WRIST, body_height, point
 
-PAIR_MAX_M = 2.5          # ask for poses when two people are this close
-CLOSE_M = 1.5             # a fight needs them this close
-LIMB_SPEED_BH = 1.8       # body heights / s, relative to the body's own movement
-GAP_TOLERANCE_S = 0.7     # agitation may drop out this long without resetting the clock
+PERSON_HEIGHT_M = 1.7     # body height used to turn box heights into metres
+PAIR_MAX_M = 1.5          # ask for poses when the gap between two people is this small
+CLOSE_M = 0.8             # a fight needs them this close (box gap)
+# Tuned on a real street fight clip (2026-11-08): punches are only a few frames long, so fast samples
+# come in bursts up to ~1.2 s apart; calm gesturing next to someone stayed below ~1.0.
+LIMB_SPEED_BH = 1.2       # body heights / s, relative to the body's own movement
+GAP_TOLERANCE_S = 1.2     # fast samples this far apart still count as one agitated stretch
 CHARGE_MPS = 3.0
 CHARGE_WINDOW_S = 1.0
 FALL_WINDOW_S = 2.0
@@ -39,6 +43,7 @@ class _Person:
     poses: Deque[Tuple[float, np.ndarray, np.ndarray]] = field(default_factory=deque)  # (ts, kpts, box)
     shape: Deque[Tuple[float, float]] = field(default_factory=deque)  # (ts, box h/w)
     agitation: float = 0.0  # latest limb speed, body heights / s
+    hot_ts: Optional[float] = None  # last sample with agitation >= LIMB_SPEED_BH
     peak: float = 0.0
 
 
@@ -65,6 +70,15 @@ class FightDetector:
         return [z for z in ctx.zones if z.rules.fight and z.rules.is_active_at(ctx.ts)
                 and "person" in z.rules.applies_to]
 
+    @staticmethod
+    def _distance_m(a: TrackView, b: TrackView) -> float:
+        """Gap between the two boxes (0 when they touch) combined with the feet's depth difference, in
+        metres scaled by the taller box. Not feet-to-feet: a fighting stance or a punch widens the box
+        and moves its centre, so two people at arm's length measured ~2 m apart that way."""
+        h = float(max(a.xyxy[3] - a.xyxy[1], b.xyxy[3] - b.xyxy[1], 1.0))  # numpy float32 isn't JSON-serialisable
+        gap_x = max(0.0, max(a.xyxy[0], b.xyxy[0]) - min(a.xyxy[2], b.xyxy[2]))
+        return float(np.hypot(gap_x, a.point[1] - b.point[1])) / h * PERSON_HEIGHT_M
+
     def pose_requests(self, ctx: FrameContext) -> Set[int]:
         zones = self._zones(ctx)
         if not zones:
@@ -74,7 +88,7 @@ class FightDetector:
         wanted = set()
         for i, a in enumerate(people):
             for b in people[i + 1:]:
-                if ctx.calibration.distance_m(a.point, b.point) <= PAIR_MAX_M:
+                if self._distance_m(a, b) <= PAIR_MAX_M:
                     wanted.update((a.track_id, b.track_id))
         return wanted
 
@@ -125,6 +139,8 @@ class FightDetector:
                         speeds.append(float(np.linalg.norm((b - a) / dt - body_v)) / bh)
                 p.agitation = max(speeds, default=0.0)
                 p.peak = max(p.peak, p.agitation)
+                if p.agitation >= LIMB_SPEED_BH:
+                    p.hot_ts = ts
         p.poses.append((ts, t.keypoints.copy(), box))
         while p.poses and ts - p.poses[0][0] > HISTORY_S:
             p.poses.popleft()
@@ -139,7 +155,7 @@ class FightDetector:
     def _judge_pair(self, a: TrackView, b: TrackView, zone, ctx: FrameContext) -> Optional[CandidateEvent]:
         key = (min(a.track_id, b.track_id), max(a.track_id, b.track_id))
         pair = self._pairs.setdefault(key, _Pair())
-        dist = ctx.calibration.distance_m(a.point, b.point)
+        dist = self._distance_m(a, b)
         pair.distances.append((ctx.ts, dist))
         while pair.distances and ctx.ts - pair.distances[0][0] > CHARGE_WINDOW_S:
             pair.distances.popleft()
@@ -148,11 +164,11 @@ class FightDetector:
             return None
 
         pa, pb = self._people[a.track_id], self._people[b.track_id]
-        agitated = max(pa.agitation, pb.agitation) >= LIMB_SPEED_BH
-        if agitated:
-            if pair.since is None or pair.last_agitated is None or ctx.ts - pair.last_agitated > GAP_TOLERANCE_S:
-                pair.since = ctx.ts
-            pair.last_agitated = ctx.ts
+        hot = max((t for t in (pa.hot_ts, pb.hot_ts) if t is not None), default=None)
+        if hot is not None and hot != pair.last_agitated and ctx.ts - hot <= GAP_TOLERANCE_S:
+            if pair.since is None or pair.last_agitated is None or hot - pair.last_agitated > GAP_TOLERANCE_S:
+                pair.since = hot
+            pair.last_agitated = hot
         elif pair.last_agitated is not None and ctx.ts - pair.last_agitated > GAP_TOLERANCE_S:
             pair.since = pair.last_agitated = None
         agitated_s = 0.0 if pair.since is None else pair.last_agitated - pair.since
@@ -164,7 +180,7 @@ class FightDetector:
         subtype = None
         if agitated_s >= zone.rules.fight_min_seconds:
             subtype = "strikes"
-        elif closing >= CHARGE_MPS and agitated_s >= 0.3:
+        elif closing >= CHARGE_MPS and pair.last_agitated is not None:
             subtype = "charge"
         elif fell is not None and pair.last_agitated is not None:
             subtype = "fall"

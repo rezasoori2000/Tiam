@@ -94,7 +94,9 @@ class _TrackInfo:
     confidence: Optional[float] = None
 
 
-POSE_EVERY_N_FRAMES = 2
+# Pose (~45 ms on the laptop RTX 3050) runs only while a detector asks (fight: two people close in a
+# fight zone). Every frame: at a live ~6 fps, every 2nd frame missed the punches in a real fight clip.
+POSE_EVERY_N_FRAMES = 1
 
 
 class VisionEngine:
@@ -669,7 +671,6 @@ class VisionEngine:
         for detector in self.detectors:
             if hasattr(detector, "pose_requests"):
                 wanted |= detector.pose_requests(ctx)
-        # Pose costs ~40 ms on a laptop RTX 3050: every 2nd frame; detectors use real timestamps.
         self._pose_tick = (self._pose_tick + 1) % POSE_EVERY_N_FRAMES if wanted else 0
         if wanted and self._pose_tick == 1 % POSE_EVERY_N_FRAMES:
             if self._pose is None:

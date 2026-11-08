@@ -60,7 +60,7 @@ def run(scenario_path: Path, realtime: bool = False, min_obs: int = 3, window: i
     import yaml
 
     from app.analytics import default_detectors
-    from app.camera_manager import _IncidentTracker
+    from app.camera_manager import _IncidentTracker, letterbox
     from app.config import CalibrationConfig, EngineConfig, Zone, ZoneRules
     from app.vision_engine import VisionEngine
 
@@ -83,7 +83,7 @@ def run(scenario_path: Path, realtime: bool = False, min_obs: int = 3, window: i
         if not ok:
             break
         t = n / fps
-        _, events = engine.process_frame(frame, ts=1_000_000.0 + t)  # fixed epoch offset; only differences matter
+        _, events = engine.process_frame(letterbox(frame), ts=1_000_000.0 + t)  # fixed epoch offset; only differences matter
         tracker.start_frame()
         for ev in events:
             if tracker.observe(ev, 1_000_000.0 + t):

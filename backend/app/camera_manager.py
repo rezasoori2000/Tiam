@@ -254,6 +254,20 @@ class _IncidentTracker:
 RAW_JPEG_INTERVAL_S = 1.0
 
 
+def letterbox(frame: np.ndarray, aspect: float = 16 / 9) -> np.ndarray:
+    """Pads a frame with black bars to `aspect` so the later resize to FRAME_SIZE doesn't squash it.
+    Used for file sources (phone / portrait clips); real cameras keep the plain stretch their
+    existing zones were drawn on."""
+    h, w = frame.shape[:2]
+    if abs(w / h - aspect) < 0.01:
+        return frame
+    if w / h < aspect:
+        pad = int(round(h * aspect)) - w
+        return cv2.copyMakeBorder(frame, 0, 0, pad // 2, pad - pad // 2, cv2.BORDER_CONSTANT)
+    pad = int(round(w / aspect)) - h
+    return cv2.copyMakeBorder(frame, pad // 2, pad - pad // 2, 0, 0, cv2.BORDER_CONSTANT)
+
+
 class _SharedCapture:
     """One connection to a physical camera, read on its own thread as fast as
     the camera sends. Only the newest frame is kept, stamped with the time it
@@ -353,6 +367,7 @@ class _SharedCapture:
                             self.last_error = "frame read failed"
                             break
                         if is_file:
+                            frame = letterbox(frame)
                             next_at += file_interval
                             delay = next_at - time.time()
                             if delay > 0:

@@ -109,6 +109,8 @@ gate on `Depends(auth.require_admin)` at the router level.
   connection settings of its own. See "Fisheye views" below.
   `source_type == "file"`: `stream_path` is a file name inside `backend/data/retail_test_clips`
   (validated: no paths outside it), read in a loop at the file's own fps – for tests and demos.
+  Frames are letterboxed to 16:9 (`camera_manager.letterbox`, also in `replay.py`): a portrait phone
+  clip stretched to 960x540 squashed people until YOLO missed them. Real cameras are still stretched.
   `site_id?` (plain INT → `sites`, assigned to the default site by `crud`).
 - **Site** (`sites`) — `id, name, site_type(hospital|mall|other), timezone (Pacific/Auckland),
   after_hours_from/to ("20:00"/"06:00", the night window), trading_hours? (JSON), max_stay_hours?`.
@@ -283,15 +285,18 @@ Zones/calibration are loaded per-camera from the DB via `config_loader.load_zone
   appearing within 2 m + 2 m/s × gap (<= 30 s) of a lost one inherits its visits (prowlers get lost
   behind cars). Needs calibration for metres. Tests: `tests/test_car_prowling.py`.
 - **Fight / assault** (`app/analytics/fight.py`, spec F4, zone rule `fight` + `fight_min_seconds`,
-  video only): for two people in such a zone within 1.5 m: `strikes` = wrist/ankle speed *relative
-  to the body's own movement* >= 1.8 body heights/s (gaps <= 0.7 s allowed) for `fight_min_seconds`;
-  `charge` = closing at >= 3 m/s plus some agitation; `fall` = one goes from upright (box h/w >= 1.5)
+  video only): for two people in such a zone with a box gap <= 0.8 m (distances/speeds in body
+  heights x 1.7 m, *not* the camera calibration -- works uncalibrated and in close-ups; feet-to-feet
+  failed, a fighting stance widens the box): `strikes` = wrist/ankle speed *relative to the body's own
+  movement* >= 1.2 body heights/s, samples <= 1.2 s apart, for `fight_min_seconds`; `charge` = closing
+  at >= 3 m/s right after agitation; `fall` = one goes from upright (box h/w >= 1.5)
   to lying (<= 0.8) within 2 s right after agitation. Emits `fight` (risk 9, key_track_ids = both,
   track_id = lower id). Keypoints come from **PoseRunner** (`app/analytics/pose.py`,
   `backend/models/yolov8s-pose.pt`, git-ignored, missing = rule silently inert with a warning): a
   detector with `pose_requests(ctx) -> {track ids}` asks for poses (fight: people in a fight zone
-  within 2.5 m of another); `VisionEngine._run_detectors` runs one pose call on a crop around them
-  every `POSE_EVERY_N_FRAMES` (2; ~40 ms on the RTX 3050) and fills `TrackView.keypoints`.
+  within 1.5 m of another); `VisionEngine._run_detectors` runs one pose call on a crop around them
+  every `POSE_EVERY_N_FRAMES` (1 -- at a live ~6 fps every 2nd frame missed real punches; ~45 ms on the
+  RTX 3050) and fills `TrackView.keypoints`. Thresholds were tuned on one real street-fight clip.
   `*-pose.pt` files are hidden from the Detection Settings model list. Tests: `tests/test_fight.py`.
 - **Incident pipeline** (`app/incident_pipeline.py`): after `_IncidentTracker` confirms an incident,
   `IncidentPipeline.handle_frame` persists it (`crud.create_event`, sets `event_type`), writes the
