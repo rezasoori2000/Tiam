@@ -56,6 +56,11 @@ foreach ($w in $weights) {
     }
 }
 
+# pose model for the fight rule (app/analytics/pose.py reads backend\models)
+$pose = Join-Path $repo "backend\models\yolov8s-pose.pt"
+if (Test-Path $pose) { Copy-Item $pose (Join-Path $backendOut "models") }
+else { Write-Warning "backend\models\yolov8s-pose.pt not found -- fight detection will be disabled" }
+
 Copy-Item (Join-Path $repo "deploy\*") $out
 Set-Content (Join-Path $out "VERSION.txt") $version -Encoding utf8
 

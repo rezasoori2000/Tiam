@@ -159,6 +159,11 @@ _PROWLING_TYPE = dict(
     description="Parking bays: alert when someone goes car to car, lingers or crouches beside parked cars",
     applies_to="person", rule_prowling=True, default_prowling_min_vehicles=3.0,
 )
+_FIGHT_TYPE = dict(
+    name="Fight Watch",
+    description="Entrances, ED drop-off, lifts: alert when two people fight or one assaults another",
+    applies_to="person", rule_fight=True, default_fight_min_seconds=2.0,
+)
 
 
 def seed_default_zone_types(db: Session) -> None:
@@ -168,7 +173,9 @@ def seed_default_zone_types(db: Session) -> None:
         # rule, not name, since admins can rename them).
         if not any(zt.rule_prowling for zt in existing):
             db.add(models.ZoneType(**_PROWLING_TYPE, is_system=True))
-            db.commit()
+        if not any(zt.rule_fight for zt in existing):
+            db.add(models.ZoneType(**_FIGHT_TYPE, is_system=True))
+        db.commit()
         return
     defaults = [
         dict(name="Pedestrian Exclusion", description="No pedestrian entry allowed",
@@ -182,6 +189,7 @@ def seed_default_zone_types(db: Session) -> None:
         dict(name="Vehicle Stop Required", description="Vehicles must come to a stop before continuing",
              applies_to="vehicle", rule_stop_required=True, default_stop_min_seconds=1.0),
         _PROWLING_TYPE,
+        _FIGHT_TYPE,
     ]
     for d in defaults:
         db.add(models.ZoneType(**d, is_system=True))
@@ -210,6 +218,8 @@ def create_zone(db: Session, zone_in: schemas.ZoneCreate) -> models.Zone:
         "stop_min_seconds": data.get("stop_min_seconds", zone_type.default_stop_min_seconds),
         "rule_prowling": data.get("rule_prowling", zone_type.rule_prowling),
         "prowling_min_vehicles": data.get("prowling_min_vehicles", zone_type.default_prowling_min_vehicles),
+        "rule_fight": data.get("rule_fight", zone_type.rule_fight),
+        "fight_min_seconds": data.get("fight_min_seconds", zone_type.default_fight_min_seconds),
         "time_restriction_enabled": data.get(
             "time_restriction_enabled", zone_type.time_restriction_enabled
         ),

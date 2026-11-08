@@ -64,7 +64,7 @@ def available_models() -> list[str]:
     """Choices for the Detection Settings dropdown: the default plus any .pt in backend/models."""
     names = {DEFAULT_MODEL}
     if MODELS_DIR.exists():
-        names.update(p.name for p in MODELS_DIR.glob("*.pt"))
+        names.update(p.name for p in MODELS_DIR.glob("*.pt") if not p.stem.endswith("-pose"))  # pose = analytics model
     return sorted(names)
 
 

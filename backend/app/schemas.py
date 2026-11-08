@@ -117,6 +117,8 @@ class ZoneTypeBase(BaseModel):
     default_stop_min_seconds: float = 1.0
     rule_prowling: bool = False
     default_prowling_min_vehicles: float = Field(default=3.0, ge=1, le=20)
+    rule_fight: bool = False
+    default_fight_min_seconds: float = Field(default=2.0, ge=0.5, le=10)
     time_restriction_enabled: bool = False
     default_from_time: Optional[str] = None
     default_to_time: Optional[str] = None
@@ -136,6 +138,8 @@ class ZoneTypeUpdate(BaseModel):
     default_stop_min_seconds: Optional[float] = None
     rule_prowling: Optional[bool] = None
     default_prowling_min_vehicles: Optional[float] = Field(default=None, ge=1, le=20)
+    rule_fight: Optional[bool] = None
+    default_fight_min_seconds: Optional[float] = Field(default=None, ge=0.5, le=10)
     time_restriction_enabled: Optional[bool] = None
     default_from_time: Optional[str] = None
     default_to_time: Optional[str] = None
@@ -159,6 +163,8 @@ class ZoneBase(BaseModel):
     stop_min_seconds: float = 1.0
     rule_prowling: bool = False
     prowling_min_vehicles: float = Field(default=3.0, ge=1, le=20)
+    rule_fight: bool = False
+    fight_min_seconds: float = Field(default=2.0, ge=0.5, le=10)
     time_restriction_enabled: bool = False
     from_time: Optional[str] = None
     to_time: Optional[str] = None
@@ -185,6 +191,8 @@ class ZoneCreate(BaseModel):
     stop_min_seconds: Optional[float] = None
     rule_prowling: Optional[bool] = None
     prowling_min_vehicles: Optional[float] = Field(default=None, ge=1, le=20)
+    rule_fight: Optional[bool] = None
+    fight_min_seconds: Optional[float] = Field(default=None, ge=0.5, le=10)
     time_restriction_enabled: Optional[bool] = None
     from_time: Optional[str] = None
     to_time: Optional[str] = None
@@ -207,6 +215,8 @@ class ZoneUpdate(BaseModel):
     stop_min_seconds: Optional[float] = None
     rule_prowling: Optional[bool] = None
     prowling_min_vehicles: Optional[float] = Field(default=None, ge=1, le=20)
+    rule_fight: Optional[bool] = None
+    fight_min_seconds: Optional[float] = Field(default=None, ge=0.5, le=10)
     time_restriction_enabled: Optional[bool] = None
     from_time: Optional[str] = None
     to_time: Optional[str] = None

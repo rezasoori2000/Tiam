@@ -22,6 +22,10 @@ class ZoneRules:
     # crouching beside parked vehicles; alert once the score reaches prowling_min_vehicles.
     prowling: bool = False
     prowling_min_vehicles: float = 3.0
+    # fight / assault (analytics/fight.py): two people close together with fast limb movement
+    # for fight_min_seconds (or a charge / a fall between them).
+    fight: bool = False
+    fight_min_seconds: float = 2.0
     # object classes this zone's rules apply to, matched against detector class names
     applies_to: List[str] = field(default_factory=lambda: ["person"])
     # optional time-of-day window ("HH:MM") these rules are enforced in; a

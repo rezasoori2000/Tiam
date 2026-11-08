@@ -28,10 +28,11 @@ logger = logging.getLogger(__name__)
 
 # Defaults agreed 2026-11-08 (grilling Q31): car_prowling is gated (many false alarms), speeding is off
 # (the measured speed is already precise and frames can't show speed).
-DEFAULT_MODES = {"car_prowling": "gate", "exclusion": "annotate", "failed_to_stop": "annotate", "speeding": "off"}
+DEFAULT_MODES = {"car_prowling": "gate", "exclusion": "annotate", "failed_to_stop": "annotate", "speeding": "off",
+                 "fight": "gate"}  # fight: chosen 2026-11-08
 EVENT_TYPE_LABELS = {
     "car_prowling": "Car prowling", "exclusion": "Exclusion zone breach",
-    "failed_to_stop": "Failed to stop", "speeding": "Speeding",
+    "failed_to_stop": "Failed to stop", "speeding": "Speeding", "fight": "Fight / assault",
 }
 
 

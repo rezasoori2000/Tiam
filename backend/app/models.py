@@ -91,6 +91,9 @@ class ZoneType(Base):
     # car prowling: see Zone.rule_prowling below.
     rule_prowling: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     default_prowling_min_vehicles: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
+    # fight / assault: see Zone.rule_fight below.
+    rule_fight: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    default_fight_min_seconds: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
     # optional time-of-day window ("HH:MM") the rule applies in; when
     # time_restriction_enabled is False the rule applies at all times.
     time_restriction_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -125,6 +128,10 @@ class Zone(Base):
     # lingers or crouches beside them scores points; alert at prowling_min_vehicles.
     rule_prowling: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     prowling_min_vehicles: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
+    # Fight / assault (app/analytics/fight.py, needs the pose model): two people in this zone,
+    # close together, with fast hand/foot movement for fight_min_seconds.
+    rule_fight: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    fight_min_seconds: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
     # optional time-of-day window ("HH:MM") the rules above apply in; when
     # time_restriction_enabled is False the rules apply at all times.
     time_restriction_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

@@ -23,6 +23,7 @@ VIOLATION_METRICS = {
     "speeding": "Speed Limit Exceeded",
     "failed_to_stop": "Failed to Stop",
     "car_prowling": "Car Prowling",
+    "fight": "Fight / Assault",
 }
 
 

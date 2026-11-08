@@ -228,6 +228,13 @@ function rawPayloadDetails(event: Event): { label: string; value: string }[] {
       });
     }
   }
+  if (p.type === "fight") {
+    if (Array.isArray(p.person_ids)) details.push({ label: "People", value: p.person_ids.map((i: number) => `#${i}`).join(" & ") });
+    if (p.distance_m != null) details.push({ label: "Distance apart", value: `${p.distance_m} m` });
+    if (p.agitated_seconds) details.push({ label: "Fast arm/leg movement", value: `${p.agitated_seconds}s (peak ${p.peak_limb_speed} body heights/s)` });
+    if (p.subtype === "charge") details.push({ label: "Rushed at", value: `${p.closing_speed_mps} m/s` });
+    if (p.fallen_track_id != null) details.push({ label: "Went to the ground", value: `#${p.fallen_track_id}` });
+  }
   if (event.track_id != null) details.push({ label: "Track ID", value: String(event.track_id) });
   return details;
 }

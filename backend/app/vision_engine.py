@@ -94,6 +94,9 @@ class _TrackInfo:
     confidence: Optional[float] = None
 
 
+POSE_EVERY_N_FRAMES = 2
+
+
 class VisionEngine:
     def __init__(self, config: EngineConfig, detectors: Optional[List[Detector]] = None):
         self.config = config
@@ -103,6 +106,8 @@ class VisionEngine:
         self.class_names: Dict[int, str] = dict(self.engine.class_names)
         # Analytics detectors (app/analytics), run after the built-in zone rules.
         self.detectors: List[Detector] = list(detectors or [])
+        self._pose = None  # PoseRunner, created the first time a detector asks for keypoints
+        self._pose_tick = 0
 
         with warnings.catch_warnings():
             # supervision 0.30 flags ByteTrack as deprecated (removal in 0.31)
@@ -660,6 +665,19 @@ class VisionEngine:
                 speed_kmh=t.speed_kmh, zone_hits=list(t.zone_hits), confidence=t.confidence,
             ) for t in tracks],
         )
+        wanted = set()
+        for detector in self.detectors:
+            if hasattr(detector, "pose_requests"):
+                wanted |= detector.pose_requests(ctx)
+        # Pose costs ~40 ms on a laptop RTX 3050: every 2nd frame; detectors use real timestamps.
+        self._pose_tick = (self._pose_tick + 1) % POSE_EVERY_N_FRAMES if wanted else 0
+        if wanted and self._pose_tick == 1 % POSE_EVERY_N_FRAMES:
+            if self._pose is None:
+                from .analytics.pose import PoseRunner
+                self._pose = PoseRunner(device=self.config.device)
+            keypoints = self._pose.run(frame, [t for t in ctx.tracks if t.track_id in wanted])
+            for tv in ctx.tracks:
+                tv.keypoints = keypoints.get(tv.track_id)
         by_id = {t.track_id: t for t in tracks}
         events: List[CandidateEvent] = []
         for detector in self.detectors:

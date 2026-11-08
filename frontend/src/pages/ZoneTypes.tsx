@@ -19,6 +19,8 @@ interface FormState {
   default_stop_min_seconds: string;
   rule_prowling: boolean;
   default_prowling_min_vehicles: string;
+  rule_fight: boolean;
+  default_fight_min_seconds: string;
   time_restriction_enabled: boolean;
   default_from_time: string;
   default_to_time: string;
@@ -34,6 +36,8 @@ const INITIAL_FORM: FormState = {
   default_stop_min_seconds: "1",
   rule_prowling: false,
   default_prowling_min_vehicles: "3",
+  rule_fight: false,
+  default_fight_min_seconds: "2",
   time_restriction_enabled: false,
   default_from_time: "",
   default_to_time: "",
@@ -50,6 +54,8 @@ function toFormState(zt: ZoneType): FormState {
     default_stop_min_seconds: String(zt.default_stop_min_seconds),
     rule_prowling: zt.rule_prowling,
     default_prowling_min_vehicles: String(zt.default_prowling_min_vehicles),
+    rule_fight: zt.rule_fight,
+    default_fight_min_seconds: String(zt.default_fight_min_seconds),
     time_restriction_enabled: zt.time_restriction_enabled,
     default_from_time: zt.default_from_time ?? "",
     default_to_time: zt.default_to_time ?? "",
@@ -67,6 +73,8 @@ function toPayload(form: FormState): ZoneTypeCreatePayload {
     default_stop_min_seconds: Number(form.default_stop_min_seconds) || 1,
     rule_prowling: form.rule_prowling,
     default_prowling_min_vehicles: Number(form.default_prowling_min_vehicles) || 3,
+    rule_fight: form.rule_fight,
+    default_fight_min_seconds: Number(form.default_fight_min_seconds) || 2,
     time_restriction_enabled: form.time_restriction_enabled,
     default_from_time: form.time_restriction_enabled ? form.default_from_time || null : null,
     default_to_time: form.time_restriction_enabled ? form.default_to_time || null : null,
@@ -79,6 +87,7 @@ function summarizeRules(zt: ZoneType): string {
   if (zt.default_max_speed_kmh != null) parts.push(`Speed limit ${zt.default_max_speed_kmh}km/h`);
   if (zt.rule_stop_required) parts.push(`Must stop ≥ ${zt.default_stop_min_seconds}s`);
   if (zt.rule_prowling) parts.push(`Car prowling (alert at ${zt.default_prowling_min_vehicles})`);
+  if (zt.rule_fight) parts.push(`Fight (≥ ${zt.default_fight_min_seconds}s)`);
   if (zt.time_restriction_enabled && zt.default_from_time && zt.default_to_time) {
     parts.push(`Active ${zt.default_from_time}-${zt.default_to_time}`);
   }
@@ -183,6 +192,31 @@ function ZoneTypeFields({
             className="dm-input"
           />
           <span className="mt-1 block text-xs text-muted">Alerts when a person here checks several parked cars, lingers 10 s+ beside one (+0.5) or crouches beside one (+1). Each different car = 1 point. Needs the camera calibrated.</span>
+        </label>
+      )}
+
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={form.rule_fight}
+          onChange={(e) => setForm((f) => ({ ...f, rule_fight: e.target.checked }))}
+          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-apl-sunset"
+        />
+        Fight / assault
+      </label>
+      {form.rule_fight && (
+        <label className="text-sm">
+          <span className="dm-label">Alert after (seconds of fighting)</span>
+          <input
+            type="number"
+            min="0.5"
+            max="10"
+            step="0.5"
+            value={form.default_fight_min_seconds}
+            onChange={(e) => setForm((f) => ({ ...f, default_fight_min_seconds: e.target.value }))}
+            className="dm-input"
+          />
+          <span className="mt-1 block text-xs text-muted">Alerts when two people here are close together with fast punching/kicking movement for this long, or one rushes at or knocks down the other. Needs the camera calibrated.</span>
         </label>
       )}
 

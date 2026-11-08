@@ -27,6 +27,9 @@ RULE_TYPE_PREFIXES: dict[str, tuple[str, list[str]]] = {
         "prowling", "prowler", "car to car", "checking cars", "door handle", "break-in", "break in",
         "theft from car", "suspicious person",
     ]),
+    "fight": ("Fight / Assault", [
+        "fight", "fighting", "assault", "attack", "punch", "brawl", "scuffle", "violence", "aggression",
+    ]),
     "failed_to_stop": ("Failed to Stop", [
         "stop sign", "failed to stop", "didn't stop", "did not stop", "no stop", "rolling stop",
     ]),

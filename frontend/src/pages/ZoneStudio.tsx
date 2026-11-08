@@ -33,6 +33,8 @@ interface RuleFormState {
   stop_min_seconds: string;
   rule_prowling: boolean;
   prowling_min_vehicles: string;
+  rule_fight: boolean;
+  fight_min_seconds: string;
   time_restriction_enabled: boolean;
   from_time: string;
   to_time: string;
@@ -45,6 +47,7 @@ function rulesFromType(zt: ZoneType | undefined): RuleFormState {
       max_speed_kmh: "",
       rule_stop_required: false, stop_min_seconds: "1",
       rule_prowling: false, prowling_min_vehicles: "3",
+      rule_fight: false, fight_min_seconds: "2",
       time_restriction_enabled: false, from_time: "", to_time: "",
     };
   }
@@ -56,6 +59,8 @@ function rulesFromType(zt: ZoneType | undefined): RuleFormState {
     stop_min_seconds: String(zt.default_stop_min_seconds),
     rule_prowling: zt.rule_prowling,
     prowling_min_vehicles: String(zt.default_prowling_min_vehicles),
+    rule_fight: zt.rule_fight,
+    fight_min_seconds: String(zt.default_fight_min_seconds),
     time_restriction_enabled: zt.time_restriction_enabled,
     from_time: zt.default_from_time ?? "",
     to_time: zt.default_to_time ?? "",
@@ -71,6 +76,8 @@ function rulesFromZone(z: Zone): RuleFormState {
     stop_min_seconds: String(z.stop_min_seconds),
     rule_prowling: z.rule_prowling,
     prowling_min_vehicles: String(z.prowling_min_vehicles),
+    rule_fight: z.rule_fight,
+    fight_min_seconds: String(z.fight_min_seconds),
     time_restriction_enabled: z.time_restriction_enabled,
     from_time: z.from_time ?? "",
     to_time: z.to_time ?? "",
@@ -323,6 +330,8 @@ export default function ZoneStudio() {
       stop_min_seconds: Number(rules.stop_min_seconds) || 1,
       rule_prowling: rules.rule_prowling,
       prowling_min_vehicles: Number(rules.prowling_min_vehicles) || 3,
+      rule_fight: rules.rule_fight,
+      fight_min_seconds: Number(rules.fight_min_seconds) || 2,
       time_restriction_enabled: rules.time_restriction_enabled,
       from_time: rules.time_restriction_enabled ? rules.from_time || null : null,
       to_time: rules.time_restriction_enabled ? rules.to_time || null : null,
@@ -614,6 +623,27 @@ export default function ZoneStudio() {
                   className="dm-input w-32 !py-1.5"
                 />
                 <span className="mt-1 block text-xs text-muted">Alerts when a person here checks several parked cars, lingers 10 s+ beside one (+0.5) or crouches beside one (+1). Each different car = 1 point. Needs the camera calibrated.</span>
+              </label>
+            )}
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={rules.rule_fight}
+                onChange={(e) => setRules((r) => ({ ...r, rule_fight: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-apl-sunset"
+              />
+              Fight / assault
+            </label>
+            {rules.rule_fight && (
+              <label className="ml-6 block text-sm">
+                <span className="mb-1 block text-slate-400">Alert after (seconds of fighting)</span>
+                <input
+                  type="number" min="0.5" max="10" step="0.5"
+                  value={rules.fight_min_seconds}
+                  onChange={(e) => setRules((r) => ({ ...r, fight_min_seconds: e.target.value }))}
+                  className="dm-input w-32 !py-1.5"
+                />
+                <span className="mt-1 block text-xs text-muted">Alerts when two people here are close together with fast punching/kicking movement for this long, or one rushes at or knocks down the other. Needs the camera calibrated.</span>
               </label>
             )}
             <label className="flex items-center gap-2 text-sm text-slate-300">

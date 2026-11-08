@@ -8,6 +8,27 @@ got there and what's still unresolved. Newest first.
 
 ## 2026-11-08
 
+### Fight / assault detection (spec F4, video only)
+
+**Why:** user: fights and assaults from video, as a zone rule like the others (per camera, per area,
+adjustable, time window), AI gate by default.
+
+**What:** zone rule `rule_fight` + `fight_min_seconds` (Zone/ZoneType, `_add_missing_columns`,
+schemas 0.5-10 s, config/config_loader, crud), seeded "Fight Watch" type (also added to existing
+DBs), `app/analytics/fight.py` (FightDetector: strikes / charge / fall), `app/analytics/pose.py`
+(PoseRunner, yolov8s-pose.pt downloaded into backend/models with the user's OK – git-ignored, copy it
+to servers), pose wiring in `VisionEngine._run_detectors` (only when a detector asks, every 2nd
+frame), risk 9, incident search keywords, violations heatmap, AI verification default `gate` +
+prompt, UI (Zone Types, Zone Studio, incident details). `*-pose.pt` hidden from the detector list.
+**Verified:** pytest 57/57 (9 new: synthetic scuffle / short burst / far apart / walking together /
+no rule / pose requests / fall / VisionEngine wiring with a fake pose model / real pose model on
+zidane.jpg); throwaway DB `Tiam_FightTest` API checks 13/13; frontend build. Pose call ~42 ms on the
+RTX 3050. **Not verified:** real fight footage (none available) – the thresholds (1.8 body
+heights/s, 1.5 m, 3 m/s) are first guesses; tune with the replay harness on real clips. Hugs and
+play-fighting will trigger it: that's what the AI gate is for. `npm run lint` fails on this
+machine (oxlint native binding missing – reinstall node_modules).
+**Production:** build-release.ps1 now packs `backend/models/yolov8s-pose.pt`; update-release.ps1 already copies `models`.
+
 ### AI verification through a local router (9router) + secret key on Windows
 
 **Why:** the user runs Claude through 9router (localhost:20128, both /v1/messages and

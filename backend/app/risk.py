@@ -24,4 +24,8 @@ def score_event(event: dict) -> Tuple[str, int]:
     if etype == "car_prowling":
         return f"Car Prowling ({event.get('vehicles_visited', 0)} vehicles checked)", 8
 
+    if etype == "fight":
+        what = {"charge": "rush", "fall": "person fell"}.get(event.get("subtype"), "strikes")
+        return f"Fight / Assault ({what})", 9
+
     return etype.replace("_", " ").title(), 5

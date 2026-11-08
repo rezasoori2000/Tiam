@@ -90,6 +90,8 @@ _add_missing_columns(
         "default_stop_min_seconds": "FLOAT NOT NULL DEFAULT 1.0",
         "rule_prowling": "BIT NOT NULL DEFAULT 0",
         "default_prowling_min_vehicles": "FLOAT NOT NULL DEFAULT 3.0",
+        "rule_fight": "BIT NOT NULL DEFAULT 0",
+        "default_fight_min_seconds": "FLOAT NOT NULL DEFAULT 2.0",
     },
 )
 _add_missing_columns(
@@ -102,6 +104,8 @@ _add_missing_columns(
         "stop_min_seconds": "FLOAT NOT NULL DEFAULT 1.0",
         "rule_prowling": "BIT NOT NULL DEFAULT 0",
         "prowling_min_vehicles": "FLOAT NOT NULL DEFAULT 3.0",
+        "rule_fight": "BIT NOT NULL DEFAULT 0",
+        "fight_min_seconds": "FLOAT NOT NULL DEFAULT 2.0",
     },
 )
 _add_missing_columns(

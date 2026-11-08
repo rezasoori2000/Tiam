@@ -59,5 +59,6 @@ def default_detectors() -> List["Detector"]:
     """Fresh detector instances for one camera (each keeps its own per-track state). Detectors
     check their own zone rules, so with no matching zones they cost almost nothing."""
     from .car_prowling import CarProwlingDetector
+    from .fight import FightDetector
 
-    return [CarProwlingDetector()]
+    return [CarProwlingDetector(), FightDetector()]

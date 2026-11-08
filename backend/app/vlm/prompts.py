@@ -32,6 +32,15 @@ DEFAULT_TEMPLATES = {
         "(often with a key fob), parking attendant, cleaner, valet, child walking with a group, "
         "someone reading a bay number or sign."
     ),
+    "fight": (
+        "Site: {site_type} car park. Camera: {camera}. Zone: {zone}. Local time: {local_time}.\n"
+        "Detector: possible fight or assault - {reason}.\n"
+        "Are the marked people physically fighting or is one attacking the other (punching, kicking, "
+        "shoving, grappling, pushing someone to the ground)?\n"
+        "Common false alarms: hug or greeting, people helping someone walk or get up, carrying or "
+        "loading things together, play-fighting children, waving or pointing while talking, "
+        "two people passing close, a person tying a shoe or picking something up."
+    ),
     "exclusion": (
         "Site: {site_type} car park. Camera: {camera}. Zone: {zone} (no entry). Local time: {local_time}.\n"
         "Detector: {reason}.\n"
@@ -84,6 +93,12 @@ def detector_reason(ev: dict) -> str:
                            + (" crouched" if v.get("crouch_seconds", 0) >= 2 else "")
                            for v in ev.get("visits", []))
         return f"person #{tid} stopped beside {ev.get('vehicles_visited', 0)} parked cars ({visits})"
+    if etype == "fight":
+        a, b = (ev.get("person_ids") or [tid, None])[:2]
+        what = {"charge": f"one rushed at the other ({ev.get('closing_speed_mps', 0)} m/s)",
+                "fall": f"person #{ev.get('fallen_track_id')} went to the ground during the encounter"
+                }.get(ev.get("subtype"), f"fast arm/leg movement for {ev.get('agitated_seconds', 0)}s")
+        return f"persons #{a} and #{b} {ev.get('distance_m', 0)} m apart, {what}"
     if etype == "exclusion":
         return f"{ev.get('class_name', 'object')} #{tid} inside the zone"
     if etype == "speeding":

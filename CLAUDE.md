@@ -116,14 +116,16 @@ gate on `Depends(auth.require_admin)` at the router level.
 - **ZoneType** (`zone_types`) — reusable rule presets. `id, name, description?, applies_to("person"|
   "vehicle"|"both", default "person"), rule_exclusion(bool), default_max_speed_kmh?,
   rule_stop_required(bool), default_stop_min_seconds(default 1.0), rule_prowling(bool),
-  default_prowling_min_vehicles(default 3.0), time_restriction_enabled(bool),
+  default_prowling_min_vehicles(default 3.0), rule_fight(bool), default_fight_min_seconds(default 2.0),
+  time_restriction_enabled(bool),
   default_from_time?("HH:MM"), default_to_time?("HH:MM"), is_system(bool)` (seeded types are
   non-deletable). Seeded: Pedestrian Exclusion, Vehicle Exclusion, Vehicle Speed Limit 10/15 km/h,
-  Vehicle Stop Required, Car Prowling Watch (also added to existing DBs by `seed_default_zone_types`).
+  Vehicle Stop Required, Car Prowling Watch, Fight Watch (the last two are also added to existing DBs
+  by `seed_default_zone_types`).
 - **Zone** (`zones`) — per-camera drawn zone. `id, camera_id`→cameras (CASCADE), `zone_type_id`→
   zone_types (SET NULL, optional), `name, polygon_points`(JSON `[[x,y],...]`), plus the same rule
   fields as ZoneType minus the "default_" prefix (`applies_to, max_speed_kmh, rule_exclusion,
-  rule_stop_required, stop_min_seconds, rule_prowling, prowling_min_vehicles,
+  rule_stop_required, stop_min_seconds, rule_prowling, prowling_min_vehicles, rule_fight, fight_min_seconds,
   time_restriction_enabled, from_time?, to_time?`).
 - **Calibration** (`calibrations`) — `id, camera_id`→cameras (CASCADE), `name, line_points`(JSON,
   2 points = reference line, or 4 = ground-rectangle corners in order, convexity validated in
@@ -237,8 +239,8 @@ by the tracker after an occlusion; ByteTrack's `lost_track_buffer` is also raise
 4. Classes used: COCO `person`, plus configured `vehicle_class_names = ["car","truck","bus",
    "motorcycle"]`; anything else is `kind="other"` and dropped.
 5. Zone rules (`ZoneRules` in `app/config.py`): `exclusion, speed_limit_kmh, stop_required,
-   stop_min_seconds, prowling, prowling_min_vehicles, applies_to, time_restriction_enabled,
-   from_time?, to_time?`. `prowling` is evaluated by the car-prowling detector (see "Incident
+   stop_min_seconds, prowling, prowling_min_vehicles, fight, fight_min_seconds, applies_to, time_restriction_enabled,
+   from_time?, to_time?`. `prowling` and `fight` are evaluated by detectors (see "Incident
    pipeline, clips, detectors"), the rest by `_apply_rules`. `ZoneRules.is_active_at(ts)` checks whether "now" falls in
    `[from_time, to_time]` (HH:MM local time), supporting overnight wraparound (e.g. 22:00→06:00 when
    `from > to`). `_apply_rules` checks this before evaluating any rule — a time-windowed rule outside its window is fully skipped (no alert, no
@@ -280,6 +282,17 @@ Zones/calibration are loaded per-camera from the DB via `config_loader.load_zone
   one incident; risk 8; payload: vehicles_visited, visits, score, threshold). A new person track
   appearing within 2 m + 2 m/s × gap (<= 30 s) of a lost one inherits its visits (prowlers get lost
   behind cars). Needs calibration for metres. Tests: `tests/test_car_prowling.py`.
+- **Fight / assault** (`app/analytics/fight.py`, spec F4, zone rule `fight` + `fight_min_seconds`,
+  video only): for two people in such a zone within 1.5 m: `strikes` = wrist/ankle speed *relative
+  to the body's own movement* >= 1.8 body heights/s (gaps <= 0.7 s allowed) for `fight_min_seconds`;
+  `charge` = closing at >= 3 m/s plus some agitation; `fall` = one goes from upright (box h/w >= 1.5)
+  to lying (<= 0.8) within 2 s right after agitation. Emits `fight` (risk 9, key_track_ids = both,
+  track_id = lower id). Keypoints come from **PoseRunner** (`app/analytics/pose.py`,
+  `backend/models/yolov8s-pose.pt`, git-ignored, missing = rule silently inert with a warning): a
+  detector with `pose_requests(ctx) -> {track ids}` asks for poses (fight: people in a fight zone
+  within 2.5 m of another); `VisionEngine._run_detectors` runs one pose call on a crop around them
+  every `POSE_EVERY_N_FRAMES` (2; ~40 ms on the RTX 3050) and fills `TrackView.keypoints`.
+  `*-pose.pt` files are hidden from the Detection Settings model list. Tests: `tests/test_fight.py`.
 - **Incident pipeline** (`app/incident_pipeline.py`): after `_IncidentTracker` confirms an incident,
   `IncidentPipeline.handle_frame` persists it (`crud.create_event`, sets `event_type`), writes the
   snapshot, starts the clip and calls `_route` → `AlertDispatcher.dispatch` (today: `/ws/alerts`).
@@ -305,7 +318,7 @@ dashboard, no AI code runs. On: per event type `off` / `annotate` (alert now, ve
 verdict, max `gate_timeout_s` 8 s; `rejected` -> stored, NOT alerted, hidden from the default
 Incidents list and deleted after `rejected_retention_days` by an hourly task in `main.lifespan`;
 timeout / error / hourly cap -> alert goes out "unverified" – a real alert is never lost). Defaults:
-car_prowling gate, exclusion + failed_to_stop annotate, speeding off.
+car_prowling + fight gate, exclusion + failed_to_stop annotate, speeding off.
 - Flow: `IncidentPipeline._route` -> `PendingVerification` (collects ring frames until incident + 2 s,
   `on_frame` from the camera thread) -> `vlm.service.VerificationService.submit` (thread pool of
   `max_concurrent`, `max_calls_per_hour` sliding window) -> `keyframes.build` (up to 6 crops around the
@@ -431,8 +444,8 @@ saves an edited circle first (`PUT /api/cameras/{id}`), then the views.
 ### Alerting
 
 `_apply_rules(tracks, ts)` returns raw event dicts (`type: exclusion|speeding|failed_to_stop`
-+ type-specific fields); detectors add `car_prowling`. `risk.score_event()` converts these to a human
-`policy_type` string + a 1-10 `risk_score` (exclusion=7, failed_to_stop=6, car_prowling=8,
++ type-specific fields); detectors add `car_prowling` and `fight`. `risk.score_event()` converts these to a human
+`policy_type` string + a 1-10 `risk_score` (exclusion=7, failed_to_stop=6, car_prowling=8, fight=9,
 speeding scaled by how far over the limit). `crud.create_event` persists it; camera_manager builds an alert payload
 (`crud.to_alert_payload`) and pushes it onto the shared queue; `main.py`'s `_pump_alerts` task
 broadcasts it live to every `/ws/alerts` client. **There is no automatic email/webhook

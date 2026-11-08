@@ -37,6 +37,8 @@ def load_zones_from_db(db: Session, camera_id: int) -> List[Zone]:
                     stop_min_seconds=row.stop_min_seconds,
                     prowling=row.rule_prowling,
                     prowling_min_vehicles=row.prowling_min_vehicles,
+                    fight=row.rule_fight,
+                    fight_min_seconds=row.fight_min_seconds,
                     applies_to=applies_to,
                     time_restriction_enabled=row.time_restriction_enabled,
                     from_time=row.from_time,
