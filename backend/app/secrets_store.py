@@ -16,8 +16,22 @@ class SecretKeyMissing(RuntimeError):
     pass
 
 
+def _windows_user_env(name: str) -> Optional[str]:
+    """A Windows user environment variable set after this process's parent started (e.g. a VS Code
+    terminal opened before it was set) isn't in os.environ; read it where Windows stores it."""
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            return str(winreg.QueryValueEx(key, name)[0]) or None
+    except OSError:
+        return None
+
+
 def _fernet() -> Fernet:
-    key = os.environ.get(ENV_VAR)
+    key = os.environ.get(ENV_VAR) or _windows_user_env(ENV_VAR)
     if not key:
         raise SecretKeyMissing(f"{ENV_VAR} is not set: secrets can't be stored")
     return Fernet(key.encode())

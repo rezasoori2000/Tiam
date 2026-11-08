@@ -8,6 +8,21 @@ got there and what's still unresolved. Newest first.
 
 ## 2026-11-08
 
+### AI verification through a local router (9router) + secret key on Windows
+
+**Why:** the user runs Claude through 9router (localhost:20128, both /v1/messages and
+/v1/chat/completions, model ids like `cc/claude-sonnet-5-5`). The API key field was disabled: the dev
+server ran in a VS Code terminal opened before `TIAM_SECRET_KEY` was set, so the process never saw it.
+
+**What:** `secrets_store` also reads `TIAM_SECRET_KEY` from the Windows user environment (registry)
+when the process env lacks it. `AnthropicProvider`: a base URL ending in `/v1` is trimmed (the SDK
+adds `/v1/messages`), and the server-side refusal fallback (`fallbacks`/beta) is only sent to
+api.anthropic.com – a router may reject it. **Verified:** pytest 48/48 (+1 secrets test); the page no
+longer shows the warning and the key field is enabled; 9router endpoints probed (401 without key).
+Not verified: an actual call through 9router (needs the user's 9router key). "Local only" must stay
+off for 9router: it is on localhost but forwards frames to the cloud.
+
+
 ### Phase 2 – optional AI verification (spec F0, branch `retail-parking`)
 
 **Why:** cut false alarms (car prowling especially) without ever losing a real alert. User: must be

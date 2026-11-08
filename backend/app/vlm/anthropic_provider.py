@@ -15,6 +15,13 @@ class AnthropicProvider:
 
     def __init__(self, api_key: str, model: str = "", timeout_s: float = 20.0, base_url: str = ""):
         self.model = model or DEFAULT_MODEL
+        # The SDK appends /v1/messages itself: "http://localhost:20128/v1" (a local router such as
+        # 9router) would become /v1/v1/messages.
+        base_url = (base_url or "").rstrip("/")
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        # Server-side refusal fallback is a feature of Anthropic's own API; a router may reject it.
+        self._direct = not base_url or "api.anthropic.com" in base_url
         # max_retries=1: one SDK retry (with backoff) on connection errors, 408/409/429/5xx.
         self._client = anthropic.Anthropic(
             api_key=api_key, timeout=timeout_s, max_retries=1, base_url=base_url or None,
@@ -27,6 +34,9 @@ class AnthropicProvider:
             for img in images
         ]
         content.append({"type": "text", "text": prompt})
+        # Server-side refusal fallback (Claude API only): re-runs a declined request on the model
+        # Anthropic recommends for that refusal category, inside the same call.
+        extra = {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"} if self._direct else {}
         t0 = time.time()
         try:
             response = self._client.beta.messages.create(
@@ -36,10 +46,7 @@ class AnthropicProvider:
                 messages=[{"role": "user", "content": content}],
                 # Low effort: a short visual yes/no judgement, and gate mode waits on it.
                 output_config={"effort": "low", "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
-                # Server-side refusal fallback (Claude API): re-runs a declined request on the model
-                # Anthropic recommends for that refusal category, inside the same call.
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
+                **extra,
             )
         except anthropic.AuthenticationError as exc:
             raise ProviderError("API key rejected (401)") from exc

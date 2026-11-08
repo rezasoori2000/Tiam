@@ -24,4 +24,4 @@ $AzureEmailSender           = ""
 
 # Encrypts stored secrets (AI verification API keys, device passwords). install.ps1 fills it in.
 # Keep it secret and back it up: if it is lost or changed, stored keys must be re-entered.
-$TiamSecretKey = ""
+$TiamSecretKey = "sk-aee5018ff0701c8e-411fi9-cf86d2d7"
